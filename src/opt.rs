@@ -26,7 +26,7 @@ impl FromStr for Mode {
 /// Proxy traffic to a machine behind a dynamic IP/firewall.
 #[derive(StructOpt, Debug)]
 pub struct Options {
-    /// Logging verbosity (-v debug, -vv trace)
+    /// Logging verbosity (-v info, -vv debug, -vvv trace)
     #[structopt(short = "v", long = "verbose", parse(from_occurrences))]
     pub verbose: u8,
 
