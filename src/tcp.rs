@@ -4,27 +4,6 @@ use std::net::Shutdown;
 use tokio::net::TcpStream;
 use tokio::prelude::*;
 
-pub fn conjoin(a: TcpStream, b: TcpStream) -> Conjoin {
-    Conjoin {
-        a,
-        b,
-        a_to_b: BufState {
-            read_done: false,
-            pos: 0,
-            cap: 0,
-            amt: 0,
-            buf: [0; 4096],
-        },
-        b_to_a: BufState {
-            read_done: false,
-            pos: 0,
-            cap: 0,
-            amt: 0,
-            buf: [0; 4096],
-        },
-    }
-}
-
 pub struct Conjoin {
     a: TcpStream,
     b: TcpStream,
@@ -32,7 +11,45 @@ pub struct Conjoin {
     b_to_a: BufState,
 }
 
-struct BufState {
+impl Conjoin {
+    pub fn new(a: TcpStream, b: TcpStream) -> Self {
+        Self {
+            a,
+            b,
+            a_to_b: BufState {
+                read_done: false,
+                pos: 0,
+                cap: 0,
+                amt: 0,
+                buf: [0; 4096],
+            },
+            b_to_a: BufState {
+                read_done: false,
+                pos: 0,
+                cap: 0,
+                amt: 0,
+                buf: [0; 4096],
+            },
+        }
+    }
+
+    pub fn with_initial_state(a: TcpStream, b: TcpStream, a_to_b: BufState) -> Self {
+        Self {
+            a,
+            b,
+            a_to_b,
+            b_to_a: BufState {
+                read_done: false,
+                pos: 0,
+                cap: 0,
+                amt: 0,
+                buf: [0; 4096],
+            },
+        }
+    }
+}
+
+pub struct BufState {
     read_done: bool,
     pos: usize,
     cap: usize,
@@ -41,18 +58,24 @@ struct BufState {
 }
 
 impl BufState {
+    pub fn try_read(&mut self, reader: &mut TcpStream) -> Poll<(), io::Error> {
+        // If buffer is empty: read some data
+        if self.pos == self.cap && !self.read_done {
+            let n = try_ready!(reader.poll_read(&mut self.buf));
+            if n == 0 {
+                self.read_done = true;
+            } else {
+                self.pos = 0;
+                self.cap = n;
+            }
+        }
+
+        Ok(().into())
+    }
+
     fn try_copy(&mut self, reader: &mut TcpStream, writer: &mut TcpStream) -> Poll<u64, io::Error> {
         loop {
-            // If buffer is empty: read some data
-            if self.pos == self.cap && !self.read_done {
-                let n = try_ready!(reader.poll_read(&mut self.buf));
-                if n == 0 {
-                    self.read_done = true;
-                } else {
-                    self.pos = 0;
-                    self.cap = n;
-                }
-            }
+            try_ready!(self.try_read(reader));
 
             // If buffer has data: write it out
             while self.pos < self.cap {

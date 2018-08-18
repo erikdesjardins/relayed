@@ -9,7 +9,7 @@ use tokio::timer::Delay;
 
 use backoff::Backoff;
 use stream;
-use tcp::conjoin;
+use tcp::Conjoin;
 
 pub fn run(gateway: SocketAddr, private: SocketAddr, retry: bool) {
     let backoff = Arc::new(Backoff::new(1..=64));
@@ -23,7 +23,7 @@ pub fn run(gateway: SocketAddr, private: SocketAddr, retry: bool) {
                     (Ok(p), Ok(g)) => info!("Copying from {} to {}", p, g),
                     (Err(e), _) | (_, Err(e)) => warn!("Error getting peer address: {}", e),
                 }
-                conjoin(gateway, private).then(|r| {
+                Conjoin::new(gateway, private).then(|r| {
                     match r {
                         Ok((bytes_out, bytes_in)) => {
                             info!("{} bytes out, {} bytes in", bytes_out, bytes_in)
