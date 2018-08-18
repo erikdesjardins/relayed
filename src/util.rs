@@ -1,4 +1,5 @@
 use std::fmt::{self, Debug, Display};
+use std::ops::RangeInclusive;
 
 use failure::Error;
 
@@ -52,5 +53,31 @@ impl Display for ShowCauses {
 impl<E: Into<Error>> From<E> for ShowCauses {
     fn from(error: E) -> Self {
         ShowCauses(error.into())
+    }
+}
+
+pub struct Backoff {
+    value: u64,
+    min: u64,
+    max: u64,
+}
+
+impl Backoff {
+    fn new(range: RangeInclusive<u64>) -> Self {
+        Backoff {
+            value: *range.start(),
+            min: *range.start(),
+            max: *range.end(),
+        }
+    }
+
+    fn get(&mut self) -> u64 {
+        let value = self.value;
+        self.value = self.value.saturating_mul(2).max(self.max);
+        value
+    }
+
+    fn reset(&mut self) {
+        self.value = self.min;
     }
 }
