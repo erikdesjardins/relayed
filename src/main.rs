@@ -7,6 +7,7 @@ extern crate log;
 extern crate structopt;
 extern crate tokio;
 
+mod backoff;
 mod client;
 mod opt;
 mod server;
@@ -18,6 +19,7 @@ fn main() {
 
     let opt::Options {
         verbose,
+        retry,
         mode,
         from,
         to,
@@ -34,6 +36,6 @@ fn main() {
 
     match mode {
         opt::Mode::Server => server::run(&from, &to),
-        opt::Mode::Client => client::run(from, to),
+        opt::Mode::Client => client::run(from, to, retry),
     }
 }

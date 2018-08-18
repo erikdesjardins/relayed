@@ -36,6 +36,10 @@ pub struct Options {
     #[structopt(short = "v", long = "verbose", parse(from_occurrences))]
     pub verbose: u8,
 
+    /// Retry when connection fails (exponential backoff)
+    #[structopt(short = "r", long = "retry")]
+    pub retry: bool,
+
     /// `server` or `client` mode
     pub mode: Mode,
 
