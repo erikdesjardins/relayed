@@ -13,7 +13,7 @@ nproxy server 0.0.0.0:8080 0.0.0.0:3000
 On the private machine:
 
 ```bash
-nproxy client 1.2.3.4:3000 localhost:80
+nproxy client 1.2.3.4:3000 127.0.0.1:80
 ```
 
 Which will proxy TCP from `1.2.3.4:8080` to `localhost:80` on the private machine.
