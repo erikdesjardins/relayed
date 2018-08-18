@@ -31,7 +31,7 @@ pub fn run(public: &SocketAddr, gateway: &SocketAddr) {
                     Ok((bytes_out, bytes_in)) => {
                         info!("{} bytes out, {} bytes in", bytes_out, bytes_in)
                     }
-                    Err(e) => error!("Error while copying: {}", e),
+                    Err(e) => warn!("Failed to copy: {}", e),
                 }
                 Ok(())
             })
