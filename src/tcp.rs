@@ -4,7 +4,7 @@ use std::net::Shutdown;
 use tokio::net::TcpStream;
 use tokio::prelude::*;
 
-pub fn tcp(a: TcpStream, b: TcpStream) -> Conjoin {
+pub fn conjoin(a: TcpStream, b: TcpStream) -> Conjoin {
     Conjoin {
         a,
         b,

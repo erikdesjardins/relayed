@@ -10,9 +10,10 @@ extern crate structopt;
 extern crate tokio;
 
 mod client;
-mod conjoin;
 mod opt;
 mod server;
+mod stream;
+mod tcp;
 mod util;
 
 fn main() -> Result<(), util::ShowCauses> {
@@ -20,7 +21,6 @@ fn main() -> Result<(), util::ShowCauses> {
 
     let opt::Options {
         verbose,
-        retry,
         mode,
         from,
         to,
@@ -37,6 +37,6 @@ fn main() -> Result<(), util::ShowCauses> {
 
     Ok(match mode {
         opt::Mode::Server => server::run(&from, &to),
-        opt::Mode::Client => client::run(&from, &to, retry),
+        opt::Mode::Client => client::run(from, to),
     }?)
 }
