@@ -1,6 +1,5 @@
 use std::net::SocketAddr;
 
-use failure::Error;
 use tokio;
 use tokio::net::TcpStream;
 use tokio::prelude::*;
@@ -8,7 +7,7 @@ use tokio::prelude::*;
 use stream;
 use tcp::conjoin;
 
-pub fn run(gateway: SocketAddr, private: SocketAddr) -> Result<(), Error> {
+pub fn run(gateway: SocketAddr, private: SocketAddr) {
     let server = stream::repeat_with(move || {
         TcpStream::connect(&gateway)
             .join(TcpStream::connect(&private))
@@ -26,6 +25,4 @@ pub fn run(gateway: SocketAddr, private: SocketAddr) -> Result<(), Error> {
         .map_err(|e| warn!("Error while copying: {}", e));
 
     tokio::run(server);
-
-    Ok(())
 }

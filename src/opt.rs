@@ -1,3 +1,4 @@
+use std::fmt::{self, Display};
 use std::net::SocketAddr;
 use std::str::FromStr;
 
@@ -7,9 +8,14 @@ pub enum Mode {
     Client,
 }
 
-#[derive(Debug, Fail)]
-#[fail(display = "optional was None")]
+#[derive(Debug)]
 pub struct InvalidMode;
+
+impl Display for InvalidMode {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str("Mode was not `server` or `client`")
+    }
+}
 
 impl FromStr for Mode {
     type Err = InvalidMode;

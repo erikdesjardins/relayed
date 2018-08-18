@@ -1,7 +1,5 @@
 extern crate env_logger;
 #[macro_use]
-extern crate failure;
-#[macro_use]
 extern crate futures;
 #[macro_use]
 extern crate log;
@@ -14,9 +12,8 @@ mod opt;
 mod server;
 mod stream;
 mod tcp;
-mod util;
 
-fn main() -> Result<(), util::ShowCauses> {
+fn main() {
     use structopt::StructOpt;
 
     let opt::Options {
@@ -35,8 +32,8 @@ fn main() -> Result<(), util::ShowCauses> {
         })
         .init();
 
-    Ok(match mode {
+    match mode {
         opt::Mode::Server => server::run(&from, &to),
         opt::Mode::Client => client::run(from, to),
-    }?)
+    }
 }

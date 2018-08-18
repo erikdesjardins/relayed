@@ -1,19 +1,23 @@
 use std::net::SocketAddr;
 
-use failure::Error;
 use tokio;
 use tokio::net::TcpListener;
 use tokio::prelude::*;
 
 use tcp::conjoin;
 
-pub fn run(public: &SocketAddr, gateway: &SocketAddr) -> Result<(), Error> {
+pub fn run(public: &SocketAddr, gateway: &SocketAddr) {
     info!("Starting server...");
 
     info!("Binding to public {}...", public);
-    let public_connections = TcpListener::bind(public)?.incoming();
+    let public_connections = TcpListener::bind(public)
+        .expect("Bind to public")
+        .incoming();
+
     info!("Binding to gateway {}...", gateway);
-    let gateway_connections = TcpListener::bind(gateway)?.incoming();
+    let gateway_connections = TcpListener::bind(gateway)
+        .expect("Bind to gateway")
+        .incoming();
 
     let server = public_connections
         .zip(gateway_connections)
@@ -31,6 +35,4 @@ pub fn run(public: &SocketAddr, gateway: &SocketAddr) -> Result<(), Error> {
         .map_err(|e| warn!("Error while copying: {}", e));
 
     tokio::run(server);
-
-    Ok(())
 }
