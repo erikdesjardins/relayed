@@ -23,9 +23,8 @@ pub fn run(gateway: SocketAddr, private: SocketAddr, retry: bool) {
                     (Ok(p), Ok(g)) => info!("Copying from {} to {}", p, g),
                     (Err(e), _) | (_, Err(e)) => warn!("Error getting peer address: {}", e),
                 }
-                LazyConjoin::new(gateway, private)
-                    .and_then(|conjoin| conjoin)
-                    .then(|r| {
+                LazyConjoin::new(gateway, private).and_then(|conjoin| {
+                    let conjoin = conjoin.then(|r| {
                         match r {
                             Ok((bytes_out, bytes_in)) => {
                                 info!("{} bytes out, {} bytes in", bytes_out, bytes_in)
@@ -33,7 +32,12 @@ pub fn run(gateway: SocketAddr, private: SocketAddr, retry: bool) {
                             Err(e) => warn!("Failed to copy: {}", e),
                         }
                         Ok(())
-                    })
+                    });
+
+                    tokio::spawn(conjoin);
+
+                    Ok(())
+                })
             })
             .then(move |r| match r {
                 Ok(()) => {
