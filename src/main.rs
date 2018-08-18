@@ -33,7 +33,7 @@ fn main() -> Result<(), util::ShowCauses> {
         .init();
 
     Ok(match mode {
-        opt::Mode::Server => server::run(&from, &to, retry),
+        opt::Mode::Server => server::run(&from, &to),
         opt::Mode::Client => client::run(&from, &to, retry),
     }?)
 }
