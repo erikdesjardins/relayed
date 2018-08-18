@@ -2,12 +2,15 @@ extern crate env_logger;
 #[macro_use]
 extern crate failure;
 #[macro_use]
+extern crate futures;
+#[macro_use]
 extern crate log;
 #[macro_use]
 extern crate structopt;
 extern crate tokio;
 
 mod client;
+mod conjoin;
 mod opt;
 mod server;
 mod util;
