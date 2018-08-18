@@ -42,7 +42,7 @@ pub fn run(gateway: SocketAddr, private: SocketAddr, retry: bool) {
                     error!("{}", e);
                     if retry {
                         let seconds = backoff.get();
-                        warn!("Retrying in {}s...", seconds);
+                        info!("Retrying in {}s...", seconds);
                         future::Either::B(
                             Delay::new(Instant::now() + Duration::from_secs(seconds as u64))
                                 .map_err(|e| panic!("Error setting retry delay: {}", e)),
