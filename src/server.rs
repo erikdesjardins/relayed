@@ -26,13 +26,18 @@ pub fn run(public: &SocketAddr, gateway: &SocketAddr) {
                 (Ok(p), Ok(g)) => info!("Copying from {} to {}", p, g),
                 (Err(e), _) | (_, Err(e)) => warn!("Error getting peer address: {}", e),
             }
-            conjoin(public, gateway)
+            conjoin(public, gateway).then(|r| {
+                match r {
+                    Ok((bytes_out, bytes_in)) => {
+                        info!("{} bytes out, {} bytes in", bytes_out, bytes_in)
+                    }
+                    Err(e) => error!("Error while copying: {}", e),
+                }
+                Ok(())
+            })
         })
-        .for_each(|(bytes_out, bytes_in)| {
-            info!("{} bytes out, {} bytes in", bytes_out, bytes_in);
-            Ok(())
-        })
-        .map_err(|e| warn!("Error while copying: {}", e));
+        .map_err(|e| error!("{}", e))
+        .for_each(|()| Ok(()));
 
     tokio::run(server);
 }
