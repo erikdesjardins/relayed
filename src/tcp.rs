@@ -4,6 +4,7 @@ use std::net::Shutdown;
 use tokio::net::TcpStream;
 use tokio::prelude::*;
 
+/// Connect two TCP streams, writing the output of each stream to the other
 pub struct Conjoin {
     a: TcpStream,
     b: TcpStream,
@@ -32,24 +33,9 @@ impl Conjoin {
             },
         }
     }
-
-    pub fn with_initial_state(a: TcpStream, b: TcpStream, a_to_b: BufState) -> Self {
-        Self {
-            a,
-            b,
-            a_to_b,
-            b_to_a: BufState {
-                read_done: false,
-                pos: 0,
-                cap: 0,
-                amt: 0,
-                buf: [0; 4096],
-            },
-        }
-    }
 }
 
-pub struct BufState {
+struct BufState {
     read_done: bool,
     pos: usize,
     cap: usize,
@@ -58,7 +44,7 @@ pub struct BufState {
 }
 
 impl BufState {
-    pub fn try_read(&mut self, reader: &mut TcpStream) -> Poll<(), io::Error> {
+    fn try_read(&mut self, reader: &mut TcpStream) -> Poll<(), io::Error> {
         // If buffer is empty: read some data
         if self.pos == self.cap && !self.read_done {
             let n = try_ready!(reader.poll_read(&mut self.buf));
@@ -111,5 +97,38 @@ impl Future for Conjoin {
         let b_to_a = self.b_to_a.try_copy(&mut self.b, &mut self.a);
         // once both transfers are done, return transferred bytes
         Ok((try_ready!(a_to_b), try_ready!(b_to_a)).into())
+    }
+}
+
+/// Lazily produce a `Conjoin` after first receiving data from either TCP stream.
+/// Used to keep one spare connection open at all times.
+pub struct LazyConjoin(Option<Conjoin>);
+
+impl LazyConjoin {
+    pub fn new(a: TcpStream, b: TcpStream) -> Self {
+        LazyConjoin(Some(Conjoin::new(a, b)))
+    }
+}
+
+impl Future for LazyConjoin {
+    type Item = Conjoin;
+    type Error = io::Error;
+
+    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        let read = {
+            let inner = self.0.as_mut().unwrap();
+            (
+                inner.a_to_b.try_read(&mut inner.a),
+                inner.b_to_a.try_read(&mut inner.b),
+            )
+        };
+
+        match read {
+            (Err(e), _) | (_, Err(e)) => Err(e),
+            (Ok(Async::Ready(())), _) | (_, Ok(Async::Ready(()))) => {
+                Ok(Async::Ready(self.0.take().unwrap()))
+            }
+            (Ok(Async::NotReady), Ok(Async::NotReady)) => Ok(Async::NotReady),
+        }
     }
 }
