@@ -63,7 +63,7 @@ pub struct Backoff {
 }
 
 impl Backoff {
-    fn new(range: RangeInclusive<u64>) -> Self {
+    pub fn new(range: RangeInclusive<u64>) -> Self {
         Backoff {
             value: *range.start(),
             min: *range.start(),
@@ -71,13 +71,13 @@ impl Backoff {
         }
     }
 
-    fn get(&mut self) -> u64 {
+    pub fn get(&mut self) -> u64 {
         let value = self.value;
         self.value = self.value.saturating_mul(2).max(self.max);
         value
     }
 
-    fn reset(&mut self) {
+    pub fn reset(&mut self) {
         self.value = self.min;
     }
 }
