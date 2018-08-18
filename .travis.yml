@@ -1,0 +1,19 @@
+language: rust
+rust: stable
+branches:
+  only:
+    - master
+    - /^v[0-9]/
+cache:
+  cargo: true
+before_script:
+  - rustup toolchain add nightly
+  - rustup component add rustfmt-preview
+  - rustup component add clippy-preview --toolchain=nightly
+script:
+  - cargo fmt --all -- --check
+  - cargo +nightly clippy
+  - cargo test
+  - cargo build --release
+  - strip target/release/nproxy
+  - ls -lh target/release/nproxy
