@@ -4,3 +4,8 @@ version = "0.1.0"
 authors = []
 
 [dependencies]
+env_logger = "0.5"
+failure = "0.1"
+log = "0.4"
+structopt = { version = "0.2", default-features = false }
+tokio = "0.1"
