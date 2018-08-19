@@ -1,3 +1,3 @@
 # relayed
 
-Proxy a TCP socket to a machine behind a dynamic IP/firewall.
+Relay a TCP socket to a machine behind a dynamic IP/firewall.

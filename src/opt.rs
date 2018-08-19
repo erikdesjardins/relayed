@@ -32,7 +32,7 @@ impl FromStr for Mode {
 #[derive(StructOpt, Debug)]
 #[structopt(
     about = "\
-Proxy a TCP socket to a machine behind a dynamic IP/firewall.
+Relay a TCP socket to a machine behind a dynamic IP/firewall.
 
 Sockets can be IPv4 (`0.0.0.0:80`) or IPv6 (`[1:2:3:4::]:80`).
 
@@ -52,9 +52,9 @@ pub struct Options {
     /// `server` or `client`
     pub mode: Mode,
 
-    /// For servers, the socket to proxy from; for clients, the server's gateway socket
+    /// For servers, the socket to relay from; for clients, the server's gateway socket
     pub from: SocketAddr,
 
-    /// For servers, the gateway socket;       for clients, the socket to proxy to
+    /// For servers, the gateway socket;       for clients, the socket to relay to
     pub to: SocketAddr,
 }
