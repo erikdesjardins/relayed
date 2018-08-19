@@ -21,16 +21,17 @@ pub fn run(public: &SocketAddr, gateway: &SocketAddr) -> Result<(), io::Error> {
         .zip(gateway_connections)
         .for_each(|(public, gateway)| {
             match (public.peer_addr(), gateway.peer_addr()) {
-                (Ok(p), Ok(g)) => info!("Copying from {} to {}", p, g),
+                (Ok(p), Ok(g)) => info!("Transferring from {} to {}", p, g),
                 (Err(e), _) | (_, Err(e)) => warn!("Error getting peer address: {}", e),
             }
 
             let conjoin = Conjoin::new(public, gateway).then(|r| {
                 match r {
-                    Ok((bytes_out, bytes_in)) => {
-                        info!("{} bytes out, {} bytes in", bytes_out, bytes_in)
-                    }
-                    Err(e) => warn!("Failed to copy: {}", e),
+                    Ok((bytes_down, bytes_up)) => info!(
+                        "Transfer complete: {} bytes down, {} bytes up",
+                        bytes_down, bytes_up
+                    ),
+                    Err(e) => warn!("Transfer cancelled: {}", e),
                 }
                 Ok(())
             });

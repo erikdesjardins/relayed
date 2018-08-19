@@ -22,16 +22,17 @@ pub fn run(gateway: SocketAddr, private: SocketAddr, retry: bool) -> Result<(), 
             .join(TcpStream::connect(&private))
             .and_then(|(gateway, private)| {
                 match (gateway.peer_addr(), private.peer_addr()) {
-                    (Ok(p), Ok(g)) => info!("Copying from {} to {}", p, g),
+                    (Ok(p), Ok(g)) => info!("Transferring from {} to {}", p, g),
                     (Err(e), _) | (_, Err(e)) => warn!("Error getting peer address: {}", e),
                 }
                 LazyConjoin::new(gateway, private).and_then(|conjoin| {
                     let conjoin = conjoin.then(|r| {
                         match r {
-                            Ok((bytes_out, bytes_in)) => {
-                                info!("{} bytes out, {} bytes in", bytes_out, bytes_in)
-                            }
-                            Err(e) => warn!("Failed to copy: {}", e),
+                            Ok((bytes_down, bytes_up)) => info!(
+                                "Transfer complete: {} bytes down, {} bytes up",
+                                bytes_down, bytes_up
+                            ),
+                            Err(e) => warn!("Transfer cancelled: {}", e),
                         }
                         Ok(())
                     });
