@@ -3,10 +3,10 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use tokio;
+use tokio::executor::current_thread::spawn;
 use tokio::net::TcpStream;
 use tokio::prelude::*;
-use tokio::runtime::Runtime;
+use tokio::runtime::current_thread::Runtime;
 use tokio::timer::Delay;
 
 use backoff::Backoff;
@@ -36,7 +36,7 @@ pub fn run(gateway: SocketAddr, private: SocketAddr, retry: bool) -> Result<(), 
                         Ok(())
                     });
 
-                    tokio::spawn(conjoin);
+                    spawn(conjoin);
 
                     Ok(())
                 })

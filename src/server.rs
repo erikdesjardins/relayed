@@ -1,10 +1,10 @@
 use std::io;
 use std::net::SocketAddr;
 
-use tokio;
+use tokio::executor::current_thread::spawn;
 use tokio::net::TcpListener;
 use tokio::prelude::*;
-use tokio::runtime::Runtime;
+use tokio::runtime::current_thread::Runtime;
 
 use tcp::Conjoin;
 
@@ -35,7 +35,7 @@ pub fn run(public: &SocketAddr, gateway: &SocketAddr) -> Result<(), io::Error> {
                 Ok(())
             });
 
-            tokio::spawn(conjoin);
+            spawn(conjoin);
 
             Ok(())
         });
