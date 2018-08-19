@@ -9,12 +9,13 @@ extern crate tokio;
 
 mod backoff;
 mod client;
+mod err;
 mod opt;
 mod server;
 mod stream;
 mod tcp;
 
-fn main() {
+fn main() -> Result<(), err::DebugFromDisplay<std::io::Error>> {
     use structopt::StructOpt;
 
     let opt::Options {
@@ -34,8 +35,8 @@ fn main() {
         })
         .init();
 
-    match mode {
+    Ok(match mode {
         opt::Mode::Server => server::run(&from, &to),
         opt::Mode::Client => client::run(from, to, retry),
-    }
+    }?)
 }
