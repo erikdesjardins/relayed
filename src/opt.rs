@@ -30,6 +30,7 @@ impl FromStr for Mode {
 }
 
 /// Proxy traffic to a machine behind a dynamic IP/firewall.
+///
 /// Sockets can be IPv4 (`0.0.0.0:80`) or IPv6 (`[1:2:3:4::]:80`).
 ///
 /// EXAMPLE: `server 0.0.0.0:8080 0.0.0.0:3000` `client 1.2.3.4:3000 127.0.0.1:80`
