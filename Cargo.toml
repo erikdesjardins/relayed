@@ -1,5 +1,5 @@
 [package]
-name = "nproxy"
+name = "relayed"
 version = "0.3.0"
 authors = []
 
