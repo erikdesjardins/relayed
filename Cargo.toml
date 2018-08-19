@@ -1,6 +1,6 @@
 [package]
-name = "nproxy"
-version = "0.3.0"
+name = "relayed"
+version = "0.3.1"
 authors = []
 
 [dependencies]
