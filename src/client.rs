@@ -1,6 +1,6 @@
 use std::io;
 use std::net::SocketAddr;
-use std::sync::Arc;
+use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use tokio::executor::current_thread::spawn;
@@ -14,7 +14,7 @@ use stream;
 use tcp::LazyConjoin;
 
 pub fn run(gateway: SocketAddr, private: SocketAddr, retry: bool) -> Result<(), io::Error> {
-    let backoff = Arc::new(Backoff::new(1..=64));
+    let backoff = Rc::new(Backoff::new(1..=64));
 
     let server = stream::repeat_with(move || {
         let backoff = backoff.clone();
