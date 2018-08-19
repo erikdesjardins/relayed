@@ -1,23 +1,21 @@
+use std::io;
 use std::net::SocketAddr;
 
-use tokio;
+use tokio::executor::current_thread::spawn;
 use tokio::net::TcpListener;
 use tokio::prelude::*;
+use tokio::runtime::current_thread::Runtime;
 
 use tcp::Conjoin;
 
-pub fn run(public: &SocketAddr, gateway: &SocketAddr) {
+pub fn run(public: &SocketAddr, gateway: &SocketAddr) -> Result<(), io::Error> {
     info!("Starting server...");
 
     info!("Binding to public {}...", public);
-    let public_connections = TcpListener::bind(public)
-        .expect("Bind to public")
-        .incoming();
+    let public_connections = TcpListener::bind(public)?.incoming();
 
     info!("Binding to gateway {}...", gateway);
-    let gateway_connections = TcpListener::bind(gateway)
-        .expect("Bind to gateway")
-        .incoming();
+    let gateway_connections = TcpListener::bind(gateway)?.incoming();
 
     let server = public_connections
         .zip(gateway_connections)
@@ -37,11 +35,10 @@ pub fn run(public: &SocketAddr, gateway: &SocketAddr) {
                 Ok(())
             });
 
-            tokio::spawn(conjoin);
+            spawn(conjoin);
 
             Ok(())
-        })
-        .map_err(|e| error!("{}", e));
+        });
 
-    tokio::run(server);
+    Runtime::new()?.block_on(server)
 }

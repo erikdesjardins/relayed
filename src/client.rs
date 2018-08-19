@@ -1,18 +1,20 @@
+use std::io;
 use std::net::SocketAddr;
-use std::sync::Arc;
+use std::rc::Rc;
 use std::time::{Duration, Instant};
 
-use tokio;
+use tokio::executor::current_thread::spawn;
 use tokio::net::TcpStream;
 use tokio::prelude::*;
+use tokio::runtime::current_thread::Runtime;
 use tokio::timer::Delay;
 
 use backoff::Backoff;
 use stream;
 use tcp::LazyConjoin;
 
-pub fn run(gateway: SocketAddr, private: SocketAddr, retry: bool) {
-    let backoff = Arc::new(Backoff::new(1..=64));
+pub fn run(gateway: SocketAddr, private: SocketAddr, retry: bool) -> Result<(), io::Error> {
+    let backoff = Rc::new(Backoff::new(1..=64));
 
     let server = stream::repeat_with(move || {
         let backoff = backoff.clone();
@@ -34,7 +36,7 @@ pub fn run(gateway: SocketAddr, private: SocketAddr, retry: bool) {
                         Ok(())
                     });
 
-                    tokio::spawn(conjoin);
+                    spawn(conjoin);
 
                     Ok(())
                 })
@@ -42,11 +44,11 @@ pub fn run(gateway: SocketAddr, private: SocketAddr, retry: bool) {
             .then(move |r| match r {
                 Ok(()) => {
                     backoff.reset();
-                    future::Either::A(Ok(()).into_future())
+                    future::Either::A(future::ok(()))
                 }
                 Err(e) => {
-                    error!("{}", e);
                     if retry {
+                        error!("{}", e);
                         let seconds = backoff.get();
                         info!("Retrying in {}s...", seconds);
                         future::Either::B(
@@ -54,11 +56,11 @@ pub fn run(gateway: SocketAddr, private: SocketAddr, retry: bool) {
                                 .map_err(|e| panic!("Error setting retry delay: {}", e)),
                         )
                     } else {
-                        future::Either::A(Err(()).into_future())
+                        future::Either::A(future::err(e))
                     }
                 }
             })
     }).for_each(|()| Ok(()));
 
-    tokio::run(server);
+    Runtime::new()?.block_on(server)
 }
