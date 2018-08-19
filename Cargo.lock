@@ -230,7 +230,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "nproxy"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "env_logger 0.5.12 (registry+https://github.com/rust-lang/crates.io-index)",
  "futures 0.1.23 (registry+https://github.com/rust-lang/crates.io-index)",
