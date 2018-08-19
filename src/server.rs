@@ -9,8 +9,6 @@ use tokio::runtime::current_thread::Runtime;
 use tcp::Conjoin;
 
 pub fn run(public: &SocketAddr, gateway: &SocketAddr) -> Result<(), io::Error> {
-    info!("Starting server...");
-
     info!("Binding to public {}...", public);
     let public_connections = TcpListener::bind(public)?.incoming();
 
