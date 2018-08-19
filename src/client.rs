@@ -28,9 +28,10 @@ pub fn run(gateway: SocketAddr, private: SocketAddr, retry: bool) -> Result<(), 
                 LazyConjoin::new(gateway, private).and_then(|conjoin| {
                     let conjoin = conjoin.then(|r| {
                         match r {
-                            Ok((bytes_down, bytes_up)) => {
-                                info!("Transfer complete: {} bytes down, {} bytes up", bytes_down, bytes_up)
-                            }
+                            Ok((bytes_down, bytes_up)) => info!(
+                                "Transfer complete: {} bytes down, {} bytes up",
+                                bytes_down, bytes_up
+                            ),
                             Err(e) => warn!("Transfer cancelled: {}", e),
                         }
                         Ok(())

@@ -27,9 +27,10 @@ pub fn run(public: &SocketAddr, gateway: &SocketAddr) -> Result<(), io::Error> {
 
             let conjoin = Conjoin::new(public, gateway).then(|r| {
                 match r {
-                    Ok((bytes_down, bytes_up)) => {
-                        info!("Transfer complete: {} bytes down, {} bytes up", bytes_down, bytes_up)
-                    }
+                    Ok((bytes_down, bytes_up)) => info!(
+                        "Transfer complete: {} bytes down, {} bytes up",
+                        bytes_down, bytes_up
+                    ),
                     Err(e) => warn!("Transfer cancelled: {}", e),
                 }
                 Ok(())
