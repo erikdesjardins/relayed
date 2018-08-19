@@ -37,8 +37,10 @@ fn main() -> Result<(), err::DebugFromDisplay<std::io::Error>> {
         })
         .init();
 
-    Ok(match mode {
-        opt::Mode::Server => server::run(&from, &to),
-        opt::Mode::Client => client::run(from, to, retry),
-    }?)
+    match mode {
+        opt::Mode::Server => server::run(&from, &to)?,
+        opt::Mode::Client => client::run(from, to, retry)?,
+    }
+
+    Ok(())
 }
