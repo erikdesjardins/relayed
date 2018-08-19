@@ -9,3 +9,8 @@ futures = "0.1"
 log = "0.4"
 structopt = { version = "0.2", default-features = false }
 tokio = "0.1"
+
+[profile.release]
+panic = "abort"
+lto = true
+codegen-units = 1

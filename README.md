@@ -17,4 +17,3 @@ nproxy client 1.2.3.4:3000 127.0.0.1:80
 ```
 
 Which will proxy TCP from `1.2.3.4:8080` to `localhost:80` on the private machine.
-(Maximum 1 concurrent connection.)

@@ -4,7 +4,7 @@ use tokio;
 use tokio::net::TcpListener;
 use tokio::prelude::*;
 
-use tcp::conjoin;
+use tcp::Conjoin;
 
 pub fn run(public: &SocketAddr, gateway: &SocketAddr) {
     info!("Starting server...");
@@ -21,23 +21,27 @@ pub fn run(public: &SocketAddr, gateway: &SocketAddr) {
 
     let server = public_connections
         .zip(gateway_connections)
-        .and_then(|(public, gateway)| {
+        .for_each(|(public, gateway)| {
             match (public.peer_addr(), gateway.peer_addr()) {
                 (Ok(p), Ok(g)) => info!("Copying from {} to {}", p, g),
                 (Err(e), _) | (_, Err(e)) => warn!("Error getting peer address: {}", e),
             }
-            conjoin(public, gateway).then(|r| {
+
+            let conjoin = Conjoin::new(public, gateway).then(|r| {
                 match r {
                     Ok((bytes_out, bytes_in)) => {
                         info!("{} bytes out, {} bytes in", bytes_out, bytes_in)
                     }
-                    Err(e) => error!("Error while copying: {}", e),
+                    Err(e) => warn!("Failed to copy: {}", e),
                 }
                 Ok(())
-            })
+            });
+
+            tokio::spawn(conjoin);
+
+            Ok(())
         })
-        .map_err(|e| error!("{}", e))
-        .for_each(|()| Ok(()));
+        .map_err(|e| error!("{}", e));
 
     tokio::run(server);
 }

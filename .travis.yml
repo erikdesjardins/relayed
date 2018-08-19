@@ -17,3 +17,11 @@ script:
   - cargo build --release
   - strip target/release/nproxy
   - ls -lh target/release/nproxy
+deploy:
+  - provider: releases
+    api_key:
+      secure: akNH10SJfiBgq4rmCfZWNM+HBIU0dYKlEPxvrBvqIRvbUw0Mm8NICv9M4UXSqgLgVOh9VTYx6M1RinCv2OYRpJe+sgo+jC0Th0F7cK8URK5GFiA8xUx+eIUl00TATdLFk5MmmQ3IFI9coxQEa4BwV6G35H6kNL5bYx2dQhlchghL70CTAisFjWLKzepfXu+N64r2nFQeDJvtaeQKa+uvyAtQLBsuTh+j07UhFRf2GvJ9azuNhXGeKTCMrqsHN/v3OLQecWa7D5IDj71afMApI3b6vpgdbkyrvMMF0wdcyJseNw6UN9NK0Y7QNANhOOQ/BuCQ6KChebCYAsmqT0AyfL+IwTQErZdLoT9aTWr/jlLhzGWyAA/eHhBszFnMood0LOuqhIFq7grT5x5E7zNYGaWJ1E4AoYMdloskD2SXqp5dvTi7i+/5GETO4/Hv9iYIJ2tWVn+ocSuH+VzKKSeERC65Ppc/3zV9BsgW+BeGllCgiA65SXhwM2fgbPPOuFCKOSzfSzxlEauF22XIqMCZ0bRkmRt+iEKWkZ7Eek4oZ1505WF5Uv5UZH5lrNv4SlPT7Oy4iiZ1dXxEexaaXcModlUD956u3QWEKSRdM2setb/PikAI50U0xZ9p2Eu0K+peO+7zpNVFtpV/sw1zVW1bR/KpjuxJpOntDllWDEx1QH4=
+    file: target/release/nproxy
+    skip_cleanup: true
+    on:
+      tags: true
