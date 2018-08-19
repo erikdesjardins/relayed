@@ -29,12 +29,15 @@ impl FromStr for Mode {
     }
 }
 
-/// Proxy a TCP socket to a machine behind a dynamic IP/firewall.
-///
-/// Sockets can be IPv4 (`0.0.0.0:80`) or IPv6 (`[1:2:3:4::]:80`).
-///
-/// EXAMPLE: `server 0.0.0.0:8080 0.0.0.0:3000` `client 1.2.3.4:3000 127.0.0.1:80`
 #[derive(StructOpt, Debug)]
+#[structopt(about = "\
+Proxy a TCP socket to a machine behind a dynamic IP/firewall.
+
+Sockets can be IPv4 (`0.0.0.0:80`) or IPv6 (`[1:2:3:4::]:80`).
+
+EXAMPLE: `server 0.0.0.0:8080 0.0.0.0:3000` `client 1.2.3.4:3000 127.0.0.1:80`
+    public traffic -->--/         \\--<-- relay tunnel --<--/         \\-->-- private service
+")]
 pub struct Options {
     /// Logging verbosity (-v info, -vv debug, -vvv trace)
     #[structopt(short = "v", long = "verbose", parse(from_occurrences))]
