@@ -25,6 +25,11 @@ pub fn run(gateway: SocketAddr, private: SocketAddr, retry: bool) -> Result<(), 
                     (Ok(p), Ok(g)) => info!("Transferring from {} to {}", p, g),
                     (Err(e), _) | (_, Err(e)) => warn!("Error getting peer address: {}", e),
                 }
+                // once we receive data from either side, spawn a task to handle that connection
+                // and open a new connection
+                // (i.e. there will always be one connection ready, as long as no client opens a
+                //  connection without sending data, which can happen, but for simplicity we don't
+                //  handle that)
                 LazyConjoin::new(gateway, private).and_then(|conjoin| {
                     let conjoin = conjoin.then(|r| {
                         match r {

@@ -101,7 +101,6 @@ impl Future for Conjoin {
 }
 
 /// Lazily produce a `Conjoin` after first receiving data from either TCP stream.
-/// Used to keep one spare connection open at all times.
 pub struct LazyConjoin(Option<Conjoin>);
 
 impl LazyConjoin {
