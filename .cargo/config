@@ -1,2 +1,2 @@
 [build]
-rustflags = ["-Ctarget-cpu=skylake", "-Ctarget-feature=+crt-static"]
+rustflags = ["-Ctarget-cpu=haswell", "-Ctarget-feature=+crt-static"]
