@@ -1,5 +1,3 @@
-#![cfg_attr(feature = "cargo-clippy", deny(warnings))]
-
 extern crate env_logger;
 #[macro_use]
 extern crate futures;
