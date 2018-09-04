@@ -13,7 +13,7 @@ before_script:
   - rustup component add clippy-preview --toolchain=nightly
 script:
   - cargo fmt --all -- --check
-  - cargo +nightly clippy
+  - RUSTFLAGS="-D warnings" cargo +nightly clippy
   - cargo test
   - cargo build --release --target=x86_64-unknown-linux-musl
   - strip target/x86_64-unknown-linux-musl/release/relayed
