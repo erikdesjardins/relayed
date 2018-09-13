@@ -1,2 +1,2 @@
 [build]
-rustflags = ["-Ctarget-cpu=haswell", "-Ctarget-feature=+crt-static"]
+rustflags = ["-Ctarget-feature=+crt-static"]
