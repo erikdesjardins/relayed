@@ -7,13 +7,12 @@ branches:
 cache:
   cargo: true
 before_script:
-  - rustup toolchain add nightly
   - rustup target add x86_64-unknown-linux-musl
   - rustup component add rustfmt-preview
-  - rustup component add clippy-preview --toolchain=nightly
+  - rustup component add clippy-preview
 script:
   - cargo fmt --all -- --check
-  - RUSTFLAGS="-D warnings" cargo +nightly clippy
+  - RUSTFLAGS="-D warnings" cargo clippy
   - cargo test
   - cargo build --release --target=x86_64-unknown-linux-musl
   - strip target/x86_64-unknown-linux-musl/release/relayed
