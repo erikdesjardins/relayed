@@ -46,8 +46,7 @@ pub fn run(gateway: SocketAddr, private: SocketAddr, retry: bool) -> Result<(), 
 
                     Ok(())
                 })
-            })
-            .then(move |r| match r {
+            }).then(move |r| match r {
                 Ok(()) => {
                     backoff.reset();
                     future::Either::A(future::ok(()))
