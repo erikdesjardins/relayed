@@ -13,8 +13,25 @@ use backoff::Backoff;
 use stream;
 use tcp::LazyConjoin;
 
-pub fn run(gateway: SocketAddr, private: SocketAddr, retry: bool) -> Result<(), io::Error> {
+fn test_addrs(addrs: Vec<SocketAddr>, err: &'static str) -> Result<SocketAddr, io::Error> {
+    for addr in addrs {
+        match TcpStream::connect(&addr).wait() {
+            Ok(_) => return Ok(addr),
+            Err(e) => warn!("{}: {}", addr, e),
+        }
+    }
+    Err(io::Error::new(io::ErrorKind::Other, err))
+}
+
+pub fn run(
+    gateway: Vec<SocketAddr>,
+    private: Vec<SocketAddr>,
+    retry: bool,
+) -> Result<(), io::Error> {
     let backoff = Rc::new(Backoff::new(1..=64));
+
+    let gateway = test_addrs(gateway, "Unable to connect to gateway")?;
+    let private = test_addrs(private, "Unable to connect to private")?;
 
     let server = stream::repeat_with(move || {
         let backoff = backoff.clone();

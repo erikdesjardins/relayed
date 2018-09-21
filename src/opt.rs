@@ -1,60 +1,68 @@
-use std::fmt::{self, Display};
-use std::net::SocketAddr;
-use std::str::FromStr;
+use std::io;
+use std::net::{SocketAddr, ToSocketAddrs};
 
+/// Trivial wrapper to avoid structopt special-casing `Vec`
 #[derive(Debug)]
-pub enum Mode {
-    Server,
-    Client,
-}
-
-#[derive(Debug)]
-pub struct InvalidMode;
-
-impl Display for InvalidMode {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.write_str("Mode was not `server` or `client`")
-    }
-}
-
-impl FromStr for Mode {
-    type Err = InvalidMode;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "server" => Ok(Mode::Server),
-            "client" => Ok(Mode::Client),
-            _ => Err(InvalidMode),
-        }
-    }
-}
+pub struct A<T>(pub T);
 
 #[derive(StructOpt, Debug)]
 #[structopt(
     about = "\
 Relay a TCP socket to a machine behind a dynamic IP/firewall.
 
-Sockets can be IPv4 (`0.0.0.0:80`) or IPv6 (`[1:2:3:4::]:80`).
-
-EXAMPLE: `server 0.0.0.0:8080 0.0.0.0:3000` `client 1.2.3.4:3000 127.0.0.1:80`
+EXAMPLE: `server 0.0.0.0:8080 0.0.0.0:3000` `client srv.com:3000 localhost:80`
     public traffic -->--/         \\--<-- relay tunnel --<--/         \\-->-- private service
 "
 )]
 pub struct Options {
     /// Logging verbosity (-v info, -vv debug, -vvv trace)
-    #[structopt(short = "v", long = "verbose", parse(from_occurrences))]
+    #[structopt(
+        short = "v",
+        long = "verbose",
+        parse(from_occurrences),
+        raw(global = "true")
+    )]
     pub verbose: u8,
 
-    /// Retry when connection fails (exponential backoff)
-    #[structopt(short = "r", long = "retry")]
-    pub retry: bool,
-
-    /// `server` or `client`
+    #[structopt(subcommand)]
     pub mode: Mode,
+}
 
-    /// For servers, the socket to relay from; for clients, the server's gateway socket
-    pub from: SocketAddr,
+#[derive(StructOpt, Debug)]
+pub enum Mode {
+    /// Run the server half on a public machine
+    #[structopt(name = "server")]
+    Server {
+        /// Port to receive public traffic
+        public: u16,
 
-    /// For servers, the gateway socket;       for clients, the socket to relay to
-    pub to: SocketAddr,
+        /// Port to receive gateway connections from client
+        gateway: u16,
+    },
+    /// Run the client half on a private machine
+    #[structopt(name = "client")]
+    Client {
+        /// Address of server's gateway
+        #[structopt(parse(try_from_str = "socket_addrs"))]
+        gateway: A<Vec<SocketAddr>>,
+
+        /// Address to receive traffic from server
+        #[structopt(parse(try_from_str = "socket_addrs"))]
+        private: A<Vec<SocketAddr>>,
+
+        /// Retry when connection fails (exponential backoff)
+        #[structopt(short = "r", long = "retry")]
+        retry: bool,
+    },
+}
+
+fn socket_addrs(arg: &str) -> Result<A<Vec<SocketAddr>>, io::Error> {
+    let addrs = arg.to_socket_addrs()?.collect::<Vec<_>>();
+    match addrs.len() {
+        0 => Err(io::Error::new(
+            io::ErrorKind::Other,
+            "Resolved to zero addresses",
+        )),
+        _ => Ok(A(addrs)),
+    }
 }
