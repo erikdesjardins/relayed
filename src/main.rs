@@ -18,13 +18,7 @@ mod tcp;
 fn main() -> Result<(), err::DebugFromDisplay<std::io::Error>> {
     use structopt::StructOpt;
 
-    let opt::Options {
-        verbose,
-        retry,
-        mode,
-        from,
-        to,
-    } = opt::Options::from_args();
+    let opt::Options { verbose, mode } = opt::Options::from_args();
 
     env_logger::Builder::new()
         .filter_level(match verbose {
@@ -35,8 +29,15 @@ fn main() -> Result<(), err::DebugFromDisplay<std::io::Error>> {
         }).init();
 
     match mode {
-        opt::Mode::Server => server::run(&from, &to)?,
-        opt::Mode::Client => client::run(from, to, retry)?,
+        opt::Mode::Server { public, gateway } => server::run(
+            &([0, 0, 0, 0], public).into(),
+            &([0, 0, 0, 0], gateway).into(),
+        )?,
+        opt::Mode::Client {
+            gateway,
+            private,
+            retry,
+        } => client::run(gateway.0, private.0, retry)?,
     }
 
     Ok(())
