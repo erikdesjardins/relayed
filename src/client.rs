@@ -24,30 +24,32 @@ pub fn run(
     let server = stream::repeat_with(|| {
         future::ok(())
             .and_then(|()| {
-                let gateway = TcpStream::from_std(
+                info!("Connecting to gateway");
+                TcpStream::from_std(
                     net::TcpStream::connect(gateway.as_slice())?,
                     &Handle::default(),
-                )?;
-                info!("Connected to gateway {}", gateway.peer_addr()?);
+                )
+            }).and_then(|gateway| {
+                info!("Sending handshake");
+                poll(gateway, |gateway| gateway.poll_write(&[42]))
+            }).and_then(|(gateway, _)| {
+                info!("Connecting to private");
                 let private = TcpStream::from_std(
                     net::TcpStream::connect(private.as_slice())?,
                     &Handle::default(),
                 )?;
-                info!("Connected to private {}", private.peer_addr()?);
                 Ok((gateway, private))
             }).and_then(|(gateway, private)| {
-                poll(gateway, |gateway| gateway.poll_write(&[42]))
-                    .and_then(|(gateway, _)| {
-                        poll(gateway, |gateway| {
-                            let mut buf = [0; 1];
-                            try_ready!(gateway.poll_read(&mut buf));
-                            match buf {
-                                [42] => Ok(().into()),
-                                _ => Err(io::Error::from(io::ErrorKind::InvalidData)),
-                            }
-                        })
-                    }).map(move |(gateway, _)| (gateway, private))
-            }).and_then(|(gateway, private)| {
+                info!("Waiting for handshake response");
+                poll((gateway, private), |(gateway, _)| {
+                    let mut buf = [0; 1];
+                    try_ready!(gateway.poll_read(&mut buf));
+                    match buf {
+                        [42] => Ok(().into()),
+                        _ => Err(io::Error::from(io::ErrorKind::InvalidData)),
+                    }
+                })
+            }).and_then(|((gateway, private), _)| {
                 info!("Spawning connection handler");
                 Ok(spawn(Conjoin::new(gateway, private).then(|r| {
                     Ok(match r {
