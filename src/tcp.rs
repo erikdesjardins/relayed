@@ -44,24 +44,18 @@ struct BufState {
 }
 
 impl BufState {
-    fn try_read(&mut self, reader: &mut TcpStream) -> Poll<(), io::Error> {
-        // If buffer is empty: read some data
-        if self.pos == self.cap && !self.read_done {
-            let n = try_ready!(reader.poll_read(&mut self.buf));
-            if n == 0 {
-                self.read_done = true;
-            } else {
-                self.pos = 0;
-                self.cap = n;
-            }
-        }
-
-        Ok(().into())
-    }
-
     fn try_copy(&mut self, reader: &mut TcpStream, writer: &mut TcpStream) -> Poll<u64, io::Error> {
         loop {
-            try_ready!(self.try_read(reader));
+            // If buffer is empty: read some data
+            if self.pos == self.cap && !self.read_done {
+                let n = try_ready!(reader.poll_read(&mut self.buf));
+                if n == 0 {
+                    self.read_done = true;
+                } else {
+                    self.pos = 0;
+                    self.cap = n;
+                }
+            }
 
             // If buffer has data: write it out
             while self.pos < self.cap {
