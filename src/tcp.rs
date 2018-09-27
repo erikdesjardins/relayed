@@ -99,35 +99,3 @@ impl Future for Conjoin {
         Ok((try_ready!(a_to_b), try_ready!(b_to_a)).into())
     }
 }
-
-/// Lazily produce a `Conjoin` after first receiving data from either TCP stream.
-pub struct LazyConjoin(Option<Conjoin>);
-
-impl LazyConjoin {
-    pub fn new(a: TcpStream, b: TcpStream) -> Self {
-        LazyConjoin(Some(Conjoin::new(a, b)))
-    }
-}
-
-impl Future for LazyConjoin {
-    type Item = Conjoin;
-    type Error = io::Error;
-
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        let read = {
-            let inner = self.0.as_mut().unwrap();
-            (
-                inner.a_to_b.try_read(&mut inner.a),
-                inner.b_to_a.try_read(&mut inner.b),
-            )
-        };
-
-        match read {
-            (Err(e), _) | (_, Err(e)) => Err(e),
-            (Ok(Async::Ready(())), _) | (_, Ok(Async::Ready(()))) => {
-                Ok(Async::Ready(self.0.take().unwrap()))
-            }
-            (Ok(Async::NotReady), Ok(Async::NotReady)) => Ok(Async::NotReady),
-        }
-    }
-}

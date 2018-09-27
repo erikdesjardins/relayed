@@ -10,6 +10,7 @@ extern crate tokio;
 mod backoff;
 mod client;
 mod err;
+mod future;
 mod opt;
 mod server;
 mod stream;
