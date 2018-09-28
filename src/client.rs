@@ -1,5 +1,7 @@
 use std::io::{self, ErrorKind::*};
 use std::net::SocketAddr;
+use std::sync::atomic::{AtomicUsize, Ordering::*};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use tokio::executor::current_thread::spawn;
@@ -17,6 +19,8 @@ use tcp::Conjoin;
 pub fn run(gateway: &[SocketAddr], private: &[SocketAddr], retry: bool) -> Result<(), io::Error> {
     let backoff = Backoff::new(1..=64);
 
+    let active = Arc::new(AtomicUsize::new(0));
+
     let server = stream::repeat_with(|| {
         future::ok(())
             .and_then(|()| {
@@ -33,11 +37,13 @@ pub fn run(gateway: &[SocketAddr], private: &[SocketAddr], retry: bool) -> Resul
                 first_ok(private, TcpStream::connect, || Err(AddrNotAvailable.into()))
                     .map(move |private| (gateway, private))
             }).and_then(|(gateway, private)| {
-                info!("Spawning connection handler");
-                Ok(spawn(Conjoin::new(gateway, private).then(|r| {
+                info!("Spawning ({} active)", active.fetch_add(1, SeqCst) + 1);
+                let active = active.clone();
+                Ok(spawn(Conjoin::new(gateway, private).then(move |r| {
+                    let active = active.fetch_sub(1, SeqCst) - 1;
                     Ok(match r {
-                        Ok((down, up)) => info!("Closing connection: {} down, {} up", down, up),
-                        Err(e) => info!("Closing connection: {}", e),
+                        Ok((down, up)) => info!("Closing ({} active): {}/{}", active, down, up),
+                        Err(e) => info!("Closing ({} active): {}", active, e),
                     })
                 })))
             }).then(|r| match r {
@@ -46,7 +52,7 @@ pub fn run(gateway: &[SocketAddr], private: &[SocketAddr], retry: bool) -> Resul
                     future::Either::A(future::ok(()))
                 }
                 Err(ref e) if retry => {
-                    error!("Opening connection failed: {}", e);
+                    error!("{}", e);
                     let seconds = backoff.get();
                     warn!("Retrying in {} seconds", seconds);
                     future::Either::B(
