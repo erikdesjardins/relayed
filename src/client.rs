@@ -1,7 +1,7 @@
 use std::io::{self, ErrorKind::*};
 use std::net::SocketAddr;
+use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering::*};
-use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use tokio::executor::current_thread::spawn;
@@ -19,7 +19,7 @@ use tcp;
 pub fn run(gateway: &[SocketAddr], private: &[SocketAddr], retry: bool) -> Result<(), io::Error> {
     let backoff = Backoff::new(1..=64);
 
-    let active = Arc::new(AtomicUsize::new(0));
+    let active = Rc::new(AtomicUsize::new(0));
 
     let server = stream::repeat_with(|| {
         future::ok(())

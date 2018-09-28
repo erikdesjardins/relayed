@@ -1,7 +1,7 @@
 use std::io::{self, ErrorKind::*};
 use std::net::SocketAddr;
+use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering::*};
-use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use tokio::executor::current_thread::spawn;
@@ -40,7 +40,7 @@ pub fn run(public: &SocketAddr, gateway: &SocketAddr) -> Result<(), io::Error> {
             })
         }).filter_map(|x| x);
 
-    let active = Arc::new(AtomicUsize::new(0));
+    let active = Rc::new(AtomicUsize::new(0));
 
     let server = public_connections
         .zip(gateway_connections)
