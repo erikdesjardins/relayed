@@ -11,7 +11,7 @@ use tokio::runtime::current_thread::Runtime;
 use tokio::timer::Delay;
 
 use backoff::Backoff;
-use future::{first_ok, poll};
+use future::first_ok;
 use magic;
 use stream;
 use tcp::Conjoin;
@@ -28,11 +28,11 @@ pub fn run(gateway: &[SocketAddr], private: &[SocketAddr], retry: bool) -> Resul
                 first_ok(gateway, TcpStream::connect, || Err(AddrNotAvailable.into()))
             }).and_then(|gateway| {
                 info!("Sending handshake");
-                poll(gateway, magic::write_byte)
-            }).and_then(|(gateway, _)| {
+                magic::write_to(gateway)
+            }).and_then(|gateway| {
                 info!("Waiting for handshake response");
-                poll(gateway, magic::read_byte)
-            }).and_then(|(gateway, _)| {
+                magic::read_from(gateway)
+            }).and_then(|gateway| {
                 info!("Connecting to private");
                 first_ok(private, TcpStream::connect, || Err(AddrNotAvailable.into()))
                     .map(move |private| (gateway, private))

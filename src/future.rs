@@ -1,15 +1,15 @@
 use tokio::prelude::*;
 
-pub fn poll<S, T, E>(
+pub fn poll_with<S, T, E>(
     state: S,
     f: impl FnMut(&mut S) -> Poll<T, E>,
 ) -> impl Future<Item = (S, T), Error = E> {
-    PollAdaptor(Some(state), f)
+    PollWith(Some(state), f)
 }
 
-struct PollAdaptor<S, F>(Option<S>, F);
+struct PollWith<S, F>(Option<S>, F);
 
-impl<S, T, E, F> Future for PollAdaptor<S, F>
+impl<S, T, E, F> Future for PollWith<S, F>
 where
     F: FnMut(&mut S) -> Poll<T, E>,
 {

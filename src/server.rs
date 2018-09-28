@@ -10,7 +10,6 @@ use tokio::prelude::*;
 use tokio::runtime::current_thread::Runtime;
 use tokio::timer::Delay;
 
-use future::poll;
 use magic;
 use tcp::Conjoin;
 
@@ -22,7 +21,7 @@ pub fn run(public: &SocketAddr, gateway: &SocketAddr) -> Result<(), io::Error> {
 
     let gateway_connections = gateway_connections
         .and_then(|gateway| {
-            let magic_byte = poll(gateway, magic::read_byte);
+            let magic_byte = magic::read_from(gateway);
 
             let timeout = Delay::new(Instant::now() + Duration::from_secs(1)).then(|r| match r {
                 Ok(()) => Err(io::Error::from(TimedOut)),
@@ -30,7 +29,7 @@ pub fn run(public: &SocketAddr, gateway: &SocketAddr) -> Result<(), io::Error> {
             });
 
             magic_byte.select(timeout).then(|r| match r {
-                Ok(((gateway, _), _)) => {
+                Ok((gateway, _)) => {
                     info!("Client handshake succeeded");
                     Ok(Some(gateway))
                 }
@@ -50,8 +49,8 @@ pub fn run(public: &SocketAddr, gateway: &SocketAddr) -> Result<(), io::Error> {
             let active = active.clone();
             Ok(spawn(
                 // write to notify client that this connection is in use (even if the public client doesn't send anything)
-                poll(gateway, magic::write_byte)
-                    .and_then(move |(gateway, _)| Conjoin::new(public, gateway))
+                magic::write_to(gateway)
+                    .and_then(move |gateway| Conjoin::new(public, gateway))
                     .then(move |r| {
                         let active = active.fetch_sub(1, SeqCst) - 1;
                         Ok(match r {
