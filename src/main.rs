@@ -39,7 +39,7 @@ fn main() -> Result<(), err::DebugFromDisplay<std::io::Error>> {
             gateway,
             private,
             retry,
-        } => client::run(gateway.0, private.0, retry)?,
+        } => client::run(&gateway.0, &private.0, retry)?,
     }
 
     Ok(())
