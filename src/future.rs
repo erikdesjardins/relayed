@@ -2,37 +2,24 @@ use tokio::prelude::*;
 
 pub fn poll_with<S, T, E>(
     state: S,
-    f: impl FnMut(&mut S) -> Poll<T, E>,
+    mut f: impl FnMut(&mut S) -> Poll<T, E>,
 ) -> impl Future<Item = (S, T), Error = E> {
-    PollWith(Some(state), f)
+    let mut state = Some(state);
+    future::poll_fn(move || {
+        let val = try_ready!(f(state.as_mut().unwrap()));
+        Ok((state.take().unwrap(), val).into())
+    })
 }
 
-struct PollWith<S, F>(Option<S>, F);
-
-impl<S, T, E, F> Future for PollWith<S, F>
-where
-    F: FnMut(&mut S) -> Poll<T, E>,
-{
-    type Item = (S, T);
-    type Error = E;
-
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        let val = try_ready!((self.1)(self.0.as_mut().unwrap()));
-        Ok((self.0.take().unwrap(), val).into())
-    }
-}
-
-pub fn first_ok<
-    T,
-    R,
-    E,
-    Fut1: IntoFuture<Item = R, Error = E>,
-    Fut2: IntoFuture<Item = R, Error = E>,
->(
+pub fn first_ok<T, R, E, Fut1, Fut2>(
     items: impl IntoIterator<Item = T>,
     mut f: impl FnMut(T) -> Fut1,
     default: impl FnOnce() -> Fut2,
-) -> impl Future<Item = R, Error = E> {
+) -> impl Future<Item = R, Error = E>
+where
+    Fut1: IntoFuture<Item = R, Error = E>,
+    Fut2: IntoFuture<Item = R, Error = E>,
+{
     let mut iter = items.into_iter();
     match iter.next() {
         Some(first) => FirstOk::Full {
