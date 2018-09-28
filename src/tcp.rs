@@ -4,35 +4,19 @@ use std::net::Shutdown;
 use tokio::net::TcpStream;
 use tokio::prelude::*;
 
-/// Connect two TCP streams, writing the output of each stream to the other
-pub struct Conjoin {
-    a: TcpStream,
-    b: TcpStream,
-    a_to_b: BufState,
-    b_to_a: BufState,
-}
-
-impl Conjoin {
-    pub fn new(a: TcpStream, b: TcpStream) -> Self {
-        Self {
-            a,
-            b,
-            a_to_b: BufState {
-                read_done: false,
-                pos: 0,
-                cap: 0,
-                amt: 0,
-                buf: [0; 4096],
-            },
-            b_to_a: BufState {
-                read_done: false,
-                pos: 0,
-                cap: 0,
-                amt: 0,
-                buf: [0; 4096],
-            },
-        }
-    }
+pub fn conjoin(
+    mut a: TcpStream,
+    mut b: TcpStream,
+) -> impl Future<Item = (u64, u64), Error = io::Error> {
+    let mut a_to_b = BufState::new();
+    let mut b_to_a = BufState::new();
+    future::poll_fn(move || {
+        // always attempt transfers in both directions
+        let a_to_b = a_to_b.try_copy(&mut a, &mut b);
+        let b_to_a = b_to_a.try_copy(&mut b, &mut a);
+        // once both transfers are done, return transferred bytes
+        Ok((try_ready!(a_to_b), try_ready!(b_to_a)).into())
+    })
 }
 
 struct BufState {
@@ -44,6 +28,16 @@ struct BufState {
 }
 
 impl BufState {
+    fn new() -> Self {
+        Self {
+            read_done: false,
+            pos: 0,
+            cap: 0,
+            amt: 0,
+            buf: [0; 4096],
+        }
+    }
+
     fn try_copy(&mut self, reader: &mut TcpStream, writer: &mut TcpStream) -> Poll<u64, io::Error> {
         loop {
             // If buffer is empty: read some data
@@ -75,18 +69,5 @@ impl BufState {
                 return Ok(self.amt.into());
             }
         }
-    }
-}
-
-impl Future for Conjoin {
-    type Item = (u64, u64);
-    type Error = io::Error;
-
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        // always attempt transfers in both directions
-        let a_to_b = self.a_to_b.try_copy(&mut self.a, &mut self.b);
-        let b_to_a = self.b_to_a.try_copy(&mut self.b, &mut self.a);
-        // once both transfers are done, return transferred bytes
-        Ok((try_ready!(a_to_b), try_ready!(b_to_a)).into())
     }
 }

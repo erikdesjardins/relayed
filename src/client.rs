@@ -14,7 +14,7 @@ use backoff::Backoff;
 use future::first_ok;
 use magic;
 use stream;
-use tcp::Conjoin;
+use tcp;
 
 pub fn run(gateway: &[SocketAddr], private: &[SocketAddr], retry: bool) -> Result<(), io::Error> {
     let backoff = Backoff::new(1..=64);
@@ -39,7 +39,7 @@ pub fn run(gateway: &[SocketAddr], private: &[SocketAddr], retry: bool) -> Resul
             }).and_then(|(gateway, private)| {
                 info!("Spawning ({} active)", active.fetch_add(1, SeqCst) + 1);
                 let active = active.clone();
-                Ok(spawn(Conjoin::new(gateway, private).then(move |r| {
+                Ok(spawn(tcp::conjoin(gateway, private).then(move |r| {
                     let active = active.fetch_sub(1, SeqCst) - 1;
                     Ok(match r {
                         Ok((down, up)) => info!("Closing ({} active): {}/{}", active, down, up),
