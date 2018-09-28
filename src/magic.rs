@@ -1,4 +1,4 @@
-use std::io;
+use std::io::{self, ErrorKind::*};
 
 use tokio::prelude::*;
 
@@ -9,7 +9,7 @@ pub fn read_byte(reader: &mut impl AsyncRead) -> Poll<(), io::Error> {
     try_ready!(reader.poll_read(&mut buf));
     match buf {
         [MAGIC] => Ok(().into()),
-        _ => Err(io::Error::from(io::ErrorKind::InvalidData)),
+        _ => Err(InvalidData.into()),
     }
 }
 

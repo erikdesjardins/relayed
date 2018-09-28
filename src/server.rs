@@ -1,4 +1,4 @@
-use std::io;
+use std::io::{self, ErrorKind::*};
 use std::net::SocketAddr;
 use std::time::{Duration, Instant};
 
@@ -23,8 +23,8 @@ pub fn run(public: &SocketAddr, gateway: &SocketAddr) -> Result<(), io::Error> {
             let magic_byte = poll(gateway, magic::read_byte);
 
             let timeout = Delay::new(Instant::now() + Duration::from_secs(1)).then(|r| match r {
-                Ok(()) => Err(io::Error::from(io::ErrorKind::TimedOut)),
-                Err(e) => Err(io::Error::new(io::ErrorKind::Other, e)),
+                Ok(()) => Err(io::Error::from(TimedOut)),
+                Err(e) => Err(io::Error::new(Other, e)),
             });
 
             magic_byte.select(timeout).then(|r| match r {

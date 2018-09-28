@@ -1,4 +1,4 @@
-use std::io;
+use std::io::{self, ErrorKind::*};
 use std::net::Shutdown;
 
 use tokio::net::TcpStream;
@@ -61,10 +61,7 @@ impl BufState {
             while self.pos < self.cap {
                 let i = try_ready!(writer.poll_write(&self.buf[self.pos..self.cap]));
                 if i == 0 {
-                    return Err(io::Error::new(
-                        io::ErrorKind::WriteZero,
-                        "writer accepted zero bytes",
-                    ));
+                    return Err(io::Error::new(WriteZero, "writer accepted zero bytes"));
                 } else {
                     self.pos += i;
                     self.amt += i as u64;

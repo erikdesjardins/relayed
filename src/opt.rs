@@ -1,4 +1,4 @@
-use std::io;
+use std::io::{self, ErrorKind::*};
 use std::net::{SocketAddr, ToSocketAddrs};
 
 /// Trivial wrapper to avoid structopt special-casing `Vec`
@@ -60,7 +60,7 @@ fn socket_addrs(arg: &str) -> Result<A<Vec<SocketAddr>>, io::Error> {
     let addrs = arg.to_socket_addrs()?.collect::<Vec<_>>();
     match addrs.len() {
         0 => Err(io::Error::new(
-            io::ErrorKind::Other,
+            AddrNotAvailable,
             "Resolved to zero addresses",
         )),
         _ => Ok(A(addrs)),
