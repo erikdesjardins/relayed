@@ -1,0 +1,19 @@
+use std::io;
+
+use tokio::prelude::*;
+
+const MAGIC: u8 = 42;
+
+pub fn read_byte(reader: &mut impl AsyncRead) -> Poll<(), io::Error> {
+    let mut buf = [0; 1];
+    try_ready!(reader.poll_read(&mut buf));
+    match buf {
+        [MAGIC] => Ok(().into()),
+        _ => Err(io::Error::from(io::ErrorKind::InvalidData)),
+    }
+}
+
+pub fn write_byte(writer: &mut impl AsyncWrite) -> Poll<(), io::Error> {
+    try_ready!(writer.poll_write(&[MAGIC]));
+    Ok(().into())
+}

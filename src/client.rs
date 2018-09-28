@@ -11,6 +11,7 @@ use tokio::timer::Delay;
 
 use backoff::Backoff;
 use future::poll;
+use magic;
 use stream;
 use tcp::Conjoin;
 
@@ -31,17 +32,10 @@ pub fn run(
                 )
             }).and_then(|gateway| {
                 info!("Sending handshake");
-                poll(gateway, |gateway| gateway.poll_write(&[42]))
+                poll(gateway, magic::write_byte)
             }).and_then(|(gateway, _)| {
                 info!("Waiting for handshake response");
-                poll(gateway, |gateway| {
-                    let mut buf = [0; 1];
-                    try_ready!(gateway.poll_read(&mut buf));
-                    match buf {
-                        [42] => Ok(().into()),
-                        _ => Err(io::Error::from(io::ErrorKind::InvalidData)),
-                    }
-                })
+                poll(gateway, magic::read_byte)
             }).and_then(|(gateway, _)| {
                 info!("Connecting to private");
                 let private = TcpStream::from_std(

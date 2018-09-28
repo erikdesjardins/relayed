@@ -9,6 +9,7 @@ use tokio::runtime::current_thread::Runtime;
 use tokio::timer::Delay;
 
 use future::poll;
+use magic;
 use tcp::Conjoin;
 
 pub fn run(public: &SocketAddr, gateway: &SocketAddr) -> Result<(), io::Error> {
@@ -19,14 +20,7 @@ pub fn run(public: &SocketAddr, gateway: &SocketAddr) -> Result<(), io::Error> {
 
     let gateway_connections = gateway_connections
         .and_then(|gateway| {
-            let magic_byte = poll(gateway, |gateway| {
-                let mut buf = [0; 1];
-                try_ready!(gateway.poll_read(&mut buf));
-                match buf {
-                    [42] => Ok(().into()),
-                    _ => Err(io::Error::from(io::ErrorKind::InvalidData)),
-                }
-            });
+            let magic_byte = poll(gateway, magic::read_byte);
 
             let timeout = Delay::new(Instant::now() + Duration::from_secs(1)).then(|r| match r {
                 Ok(()) => Err(io::Error::from(io::ErrorKind::TimedOut)),
@@ -51,7 +45,7 @@ pub fn run(public: &SocketAddr, gateway: &SocketAddr) -> Result<(), io::Error> {
             info!("Spawning connection handler");
             Ok(spawn(
                 // write to notify client that this connection is in use (even if the public client doesn't send anything)
-                poll(gateway, |gateway| gateway.poll_write(&[42]))
+                poll(gateway, magic::write_byte)
                     .and_then(move |(gateway, _)| Conjoin::new(public, gateway))
                     .then(|r| Ok(match r {
                         Ok((down, up)) => info!("Closing connection: {} down, {} up", down, up),

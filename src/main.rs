@@ -11,6 +11,7 @@ mod backoff;
 mod client;
 mod err;
 mod future;
+mod magic;
 mod opt;
 mod server;
 mod stream;
