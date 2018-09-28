@@ -33,15 +33,8 @@ pub fn run(
                 info!("Sending handshake");
                 poll(gateway, |gateway| gateway.poll_write(&[42]))
             }).and_then(|(gateway, _)| {
-                info!("Connecting to private");
-                let private = TcpStream::from_std(
-                    net::TcpStream::connect(private.as_slice())?,
-                    &Handle::default(),
-                )?;
-                Ok((gateway, private))
-            }).and_then(|(gateway, private)| {
                 info!("Waiting for handshake response");
-                poll((gateway, private), |(gateway, _)| {
+                poll(gateway, |gateway| {
                     let mut buf = [0; 1];
                     try_ready!(gateway.poll_read(&mut buf));
                     match buf {
@@ -49,7 +42,14 @@ pub fn run(
                         _ => Err(io::Error::from(io::ErrorKind::InvalidData)),
                     }
                 })
-            }).and_then(|((gateway, private), _)| {
+            }).and_then(|(gateway, _)| {
+                info!("Connecting to private");
+                let private = TcpStream::from_std(
+                    net::TcpStream::connect(private.as_slice())?,
+                    &Handle::default(),
+                )?;
+                Ok((gateway, private))
+            }).and_then(|(gateway, private)| {
                 info!("Spawning connection handler");
                 Ok(spawn(Conjoin::new(gateway, private).then(|r| {
                     Ok(match r {
