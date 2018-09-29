@@ -13,9 +13,9 @@ mod err;
 mod future;
 mod magic;
 mod opt;
+mod rw;
 mod server;
 mod stream;
-mod tcp;
 
 fn main() -> Result<(), err::DebugFromDisplay<std::io::Error>> {
     use structopt::StructOpt;

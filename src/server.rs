@@ -11,7 +11,7 @@ use tokio::runtime::current_thread::Runtime;
 use tokio::timer::Delay;
 
 use magic;
-use tcp;
+use rw;
 
 pub fn run(public: &SocketAddr, gateway: &SocketAddr) -> Result<(), io::Error> {
     info!("Binding to public {}", public);
@@ -50,7 +50,7 @@ pub fn run(public: &SocketAddr, gateway: &SocketAddr) -> Result<(), io::Error> {
             Ok(spawn(
                 // write to notify client that this connection is in use (even if the public side doesn't send anything)
                 magic::write_to(gateway)
-                    .and_then(move |gateway| tcp::conjoin(public, gateway))
+                    .and_then(move |gateway| rw::conjoin(public, gateway))
                     .then(move |r| {
                         let active = active.fetch_sub(1, SeqCst) - 1;
                         Ok(match r {

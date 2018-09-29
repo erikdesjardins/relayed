@@ -1,12 +1,10 @@
 use std::io::{self, ErrorKind::*};
-use std::net::Shutdown;
 
-use tokio::net::TcpStream;
 use tokio::prelude::*;
 
 pub fn conjoin(
-    mut a: TcpStream,
-    mut b: TcpStream,
+    mut a: impl AsyncRead + AsyncWrite,
+    mut b: impl AsyncRead + AsyncWrite,
 ) -> impl Future<Item = (u64, u64), Error = io::Error> {
     let mut a_to_b = Buf::new();
     let mut b_to_a = Buf::new();
@@ -44,7 +42,11 @@ impl Buf {
         }
     }
 
-    fn try_copy(&mut self, reader: &mut TcpStream, writer: &mut TcpStream) -> Poll<u64, io::Error> {
+    fn try_copy(
+        &mut self,
+        reader: &mut impl AsyncRead,
+        writer: &mut impl AsyncWrite,
+    ) -> Poll<u64, io::Error> {
         loop {
             match self.state {
                 BufState::ReadWrite => {
@@ -69,8 +71,7 @@ impl Buf {
                     }
                 }
                 BufState::Shutdown => {
-                    try_ready!(writer.poll_flush());
-                    TcpStream::shutdown(writer, Shutdown::Write)?;
+                    try_ready!(writer.shutdown());
                     self.state = BufState::Done;
                 }
                 BufState::Done => {
