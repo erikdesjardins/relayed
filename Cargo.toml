@@ -1,7 +1,8 @@
 [package]
 name = "relayed"
-version = "0.5.0"
+version = "0.5.1"
 authors = []
+description = "Relay a TCP socket to a machine behind a dynamic IP/firewall."
 
 [dependencies]
 env_logger = "0.5"

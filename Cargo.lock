@@ -364,7 +364,7 @@ dependencies = [
 
 [[package]]
 name = "relayed"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "env_logger 0.5.13 (registry+https://github.com/rust-lang/crates.io-index)",
  "futures 0.1.24 (registry+https://github.com/rust-lang/crates.io-index)",
