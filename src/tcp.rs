@@ -4,130 +4,36 @@ use std::net::Shutdown;
 use tokio::net::TcpStream;
 use tokio::prelude::*;
 
-/// Connect two TCP streams, writing the output of each stream to the other
-pub struct Conjoin {
-    a: TcpStream,
-    b: TcpStream,
-    a_to_b: BufState,
-    b_to_a: BufState,
+use rw;
+
+pub fn conjoin(a: TcpStream, b: TcpStream) -> impl Future<Item = (u64, u64), Error = io::Error> {
+    rw::conjoin(ShutdownOnClose(a), ShutdownOnClose(b))
 }
 
-impl Conjoin {
-    pub fn new(a: TcpStream, b: TcpStream) -> Self {
-        Self {
-            a,
-            b,
-            a_to_b: BufState {
-                read_done: false,
-                pos: 0,
-                cap: 0,
-                amt: 0,
-                buf: [0; 4096],
-            },
-            b_to_a: BufState {
-                read_done: false,
-                pos: 0,
-                cap: 0,
-                amt: 0,
-                buf: [0; 4096],
-            },
-        }
+struct ShutdownOnClose(TcpStream);
+
+impl Read for ShutdownOnClose {
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, io::Error> {
+        self.0.read(buf)
     }
 }
 
-struct BufState {
-    read_done: bool,
-    pos: usize,
-    cap: usize,
-    amt: u64,
-    buf: [u8; 4096],
-}
-
-impl BufState {
-    fn try_read(&mut self, reader: &mut TcpStream) -> Poll<(), io::Error> {
-        // If buffer is empty: read some data
-        if self.pos == self.cap && !self.read_done {
-            let n = try_ready!(reader.poll_read(&mut self.buf));
-            if n == 0 {
-                self.read_done = true;
-            } else {
-                self.pos = 0;
-                self.cap = n;
-            }
-        }
-
-        Ok(().into())
+impl Write for ShutdownOnClose {
+    fn write(&mut self, buf: &[u8]) -> Result<usize, io::Error> {
+        self.0.write(buf)
     }
 
-    fn try_copy(&mut self, reader: &mut TcpStream, writer: &mut TcpStream) -> Poll<u64, io::Error> {
-        loop {
-            try_ready!(self.try_read(reader));
-
-            // If buffer has data: write it out
-            while self.pos < self.cap {
-                let i = try_ready!(writer.poll_write(&self.buf[self.pos..self.cap]));
-                if i == 0 {
-                    return Err(io::Error::new(
-                        io::ErrorKind::WriteZero,
-                        "writer accepted zero bytes",
-                    ));
-                } else {
-                    self.pos += i;
-                    self.amt += i as u64;
-                }
-            }
-
-            // If transfer done: flush out data and shutdown the destination stream
-            if self.pos == self.cap && self.read_done {
-                try_ready!(writer.poll_flush());
-                TcpStream::shutdown(writer, Shutdown::Write)?;
-                return Ok(self.amt.into());
-            }
-        }
+    fn flush(&mut self) -> Result<(), io::Error> {
+        self.0.flush()
     }
 }
 
-impl Future for Conjoin {
-    type Item = (u64, u64);
-    type Error = io::Error;
+impl AsyncRead for ShutdownOnClose {}
 
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        // always attempt transfers in both directions
-        let a_to_b = self.a_to_b.try_copy(&mut self.a, &mut self.b);
-        let b_to_a = self.b_to_a.try_copy(&mut self.b, &mut self.a);
-        // once both transfers are done, return transferred bytes
-        Ok((try_ready!(a_to_b), try_ready!(b_to_a)).into())
-    }
-}
-
-/// Lazily produce a `Conjoin` after first receiving data from either TCP stream.
-pub struct LazyConjoin(Option<Conjoin>);
-
-impl LazyConjoin {
-    pub fn new(a: TcpStream, b: TcpStream) -> Self {
-        LazyConjoin(Some(Conjoin::new(a, b)))
-    }
-}
-
-impl Future for LazyConjoin {
-    type Item = Conjoin;
-    type Error = io::Error;
-
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        let read = {
-            let inner = self.0.as_mut().unwrap();
-            (
-                inner.a_to_b.try_read(&mut inner.a),
-                inner.b_to_a.try_read(&mut inner.b),
-            )
-        };
-
-        match read {
-            (Err(e), _) | (_, Err(e)) => Err(e),
-            (Ok(Async::Ready(())), _) | (_, Ok(Async::Ready(()))) => {
-                Ok(Async::Ready(self.0.take().unwrap()))
-            }
-            (Ok(Async::NotReady), Ok(Async::NotReady)) => Ok(Async::NotReady),
-        }
+impl AsyncWrite for ShutdownOnClose {
+    fn shutdown(&mut self) -> Poll<(), io::Error> {
+        try_ready!(<TcpStream as AsyncWrite>::shutdown(&mut self.0));
+        TcpStream::shutdown(&self.0, Shutdown::Write)?;
+        Ok(Async::Ready(()))
     }
 }

@@ -1,38 +1,13 @@
 use tokio::prelude::*;
 
-pub struct RepeatWith<F, Fut, T, E>
+pub fn repeat_with<Fut, T, E>(mut f: impl FnMut() -> Fut) -> impl Stream<Item = T, Error = E>
 where
-    F: FnMut() -> Fut,
-    Fut: Future<Item = T, Error = E>,
+    Fut: IntoFuture<Item = T, Error = E>,
 {
-    f: F,
-    fut: Fut,
-}
-
-pub fn repeat_with<F, Fut, T, E>(mut f: F) -> RepeatWith<F, Fut, T, E>
-where
-    F: FnMut() -> Fut,
-    Fut: Future<Item = T, Error = E>,
-{
-    RepeatWith { fut: f(), f }
-}
-
-impl<F, Fut, T, E> Stream for RepeatWith<F, Fut, T, E>
-where
-    F: FnMut() -> Fut,
-    Fut: Future<Item = T, Error = E>,
-{
-    type Item = T;
-    type Error = E;
-
-    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        match self.fut.poll() {
-            Ok(Async::Ready(x)) => {
-                self.fut = (self.f)();
-                Ok(Async::Ready(Some(x)))
-            }
-            Ok(Async::NotReady) => Ok(Async::NotReady),
-            Err(e) => Err(e),
-        }
-    }
+    let mut fut = f().into_future();
+    stream::poll_fn(move || {
+        let val = try_ready!(fut.poll());
+        fut = f().into_future();
+        Ok(Some(val).into())
+    })
 }

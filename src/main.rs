@@ -1,3 +1,6 @@
+#![cfg_attr(not(feature = "cargo-clippy"), allow(unknown_lints))]
+#![allow(unit_arg)]
+
 extern crate env_logger;
 #[macro_use]
 extern crate futures;
@@ -10,7 +13,10 @@ extern crate tokio;
 mod backoff;
 mod client;
 mod err;
+mod future;
+mod magic;
 mod opt;
+mod rw;
 mod server;
 mod stream;
 mod tcp;
@@ -37,7 +43,7 @@ fn main() -> Result<(), err::DebugFromDisplay<std::io::Error>> {
             gateway,
             private,
             retry,
-        } => client::run(gateway.0, private.0, retry)?,
+        } => client::run(&gateway.0, &private.0, retry)?,
     }
 
     Ok(())
