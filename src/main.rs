@@ -1,3 +1,6 @@
+#![cfg_attr(not(feature = "cargo-clippy"), allow(unknown_lints))]
+#![allow(unit_arg)]
+
 extern crate env_logger;
 #[macro_use]
 extern crate futures;
