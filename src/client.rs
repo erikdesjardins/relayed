@@ -25,7 +25,7 @@ pub fn run(gateway: &[SocketAddr], private: &[SocketAddr], retry: bool) -> Resul
         future::ok(())
             .and_then(|()| {
                 info!("Connecting to gateway");
-                first_ok(gateway, TcpStream::connect, || Err(AddrNotAvailable.into()))
+                first_ok(gateway.iter().map(TcpStream::connect))
             }).and_then(|gateway| {
                 info!("Sending handshake");
                 magic::write_to(gateway)
@@ -34,7 +34,7 @@ pub fn run(gateway: &[SocketAddr], private: &[SocketAddr], retry: bool) -> Resul
                 magic::read_from(gateway)
             }).and_then(|gateway| {
                 info!("Connecting to private");
-                first_ok(private, TcpStream::connect, || Err(AddrNotAvailable.into()))
+                first_ok(private.iter().map(TcpStream::connect))
                     .map(move |private| (gateway, private))
             }).and_then(|(gateway, private)| {
                 info!("Spawning ({} active)", active.fetch_add(1, SeqCst) + 1);
