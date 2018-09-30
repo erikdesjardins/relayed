@@ -16,7 +16,7 @@ use tcp;
 pub fn run(public: &SocketAddr, gateway: &SocketAddr) -> Result<(), io::Error> {
     info!("Binding to public {}", public);
     let public_connections = TcpListener::bind(public)?.incoming();
-    info!("Binding to gateway {}", public);
+    info!("Binding to gateway {}", gateway);
     let gateway_connections = TcpListener::bind(gateway)?.incoming();
 
     let gateway_connections = gateway_connections
