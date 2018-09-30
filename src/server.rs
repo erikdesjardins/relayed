@@ -1,15 +1,15 @@
-use std::io::{self, ErrorKind::*};
+use std::io;
 use std::net::SocketAddr;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering::*};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use tokio::executor::current_thread::spawn;
 use tokio::net::TcpListener;
 use tokio::prelude::*;
 use tokio::runtime::current_thread::Runtime;
-use tokio::timer::Delay;
 
+use future::timeout_after_inactivity;
 use magic;
 use tcp;
 
@@ -21,23 +21,18 @@ pub fn run(public: &SocketAddr, gateway: &SocketAddr) -> Result<(), io::Error> {
 
     let gateway_connections = gateway_connections
         .and_then(|gateway| {
-            let magic_byte = magic::read_from(gateway);
-
-            let timeout = Delay::new(Instant::now() + Duration::from_secs(1)).then(|r| match r {
-                Ok(()) => Err(io::Error::from(TimedOut)),
-                Err(e) => Err(io::Error::new(Other, e)),
-            });
-
-            magic_byte.select(timeout).then(|r| match r {
-                Ok((gateway, _)) => {
-                    info!("Client handshake succeeded");
-                    Ok(Some(gateway))
-                }
-                Err((e, _)) => {
-                    info!("Client handshake failed: {}", e);
-                    Ok(None)
-                }
-            })
+            magic::read_from(gateway)
+                .select(timeout_after_inactivity(Duration::from_secs(1)))
+                .then(|r| match r {
+                    Ok((gateway, _)) => {
+                        info!("Client handshake succeeded");
+                        Ok(Some(gateway))
+                    }
+                    Err((e, _)) => {
+                        info!("Client handshake failed: {}", e);
+                        Ok(None)
+                    }
+                })
         }).filter_map(|x| x);
 
     let active = Rc::new(AtomicUsize::new(0));
@@ -51,11 +46,12 @@ pub fn run(public: &SocketAddr, gateway: &SocketAddr) -> Result<(), io::Error> {
                 // write to notify client that this connection is in use (even if the public side doesn't send anything)
                 magic::write_to(gateway)
                     .and_then(move |gateway| tcp::conjoin(public, gateway))
+                    .select(timeout_after_inactivity(Duration::from_secs(5)))
                     .then(move |r| {
                         let active = active.fetch_sub(1, SeqCst) - 1;
                         Ok(match r {
-                            Ok((down, up)) => info!("Closing ({} active): {}/{}", active, down, up),
-                            Err(e) => info!("Closing ({} active): {}", active, e),
+                            Ok(((down, up), _)) => info!("Closing ({} active): {}/{}", active, down, up),
+                            Err((e, _)) => info!("Closing ({} active): {}", active, e),
                         })
                     }),
             ))
