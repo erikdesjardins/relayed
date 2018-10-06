@@ -63,7 +63,7 @@ impl Buf {
                     while self.pos < self.cap {
                         let i = try_ready!(writer.poll_write(&self.buf[self.pos..self.cap]));
                         if i == 0 {
-                            return Err(io::Error::new(WriteZero, "writer accepted zero bytes"));
+                            return Err(WriteZero.into());
                         } else {
                             self.pos += i;
                             self.amt += i as u64;

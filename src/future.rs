@@ -37,6 +37,6 @@ pub fn timeout_after_inactivity<T>(time: Duration) -> impl Future<Item = T, Erro
             try_ready!(delay.poll().map_err(|e| io::Error::new(Other, e)));
         }
         // nothing has been polled but the timer expiry, i.e. we've been inactive the whole time
-        Err(io::Error::from(TimedOut))
+        Err(TimedOut.into())
     })
 }
