@@ -11,7 +11,7 @@ pub fn first_ok<Fut: IntoFuture>(
 }
 
 pub fn timeout_after_inactivity<T>(time: Duration) -> impl Future<Item = T, Error = io::Error> {
-    let mut poll_count = 0u32;
+    let mut poll_count = 0u64;
     let mut delay = Delay::new(Instant::now() + time);
     future::poll_fn(move || {
         poll_count += 1;
