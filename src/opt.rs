@@ -25,11 +25,11 @@ pub enum Mode {
     /// Run the server half on a public machine
     #[structopt(name = "server")]
     Server {
-        /// Port to receive public traffic on
-        public: u16,
-
         /// Port to receive gateway connections from client
         gateway: u16,
+
+        /// Port to receive public traffic on
+        public: u16,
     },
     /// Run the client half on a private machine
     #[structopt(name = "client")]
