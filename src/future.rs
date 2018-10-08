@@ -4,17 +4,6 @@ use std::time::{Duration, Instant};
 use tokio::prelude::*;
 use tokio::timer::Delay;
 
-pub fn poll_with<S, T, E>(
-    state: S,
-    mut f: impl FnMut(&mut S) -> Poll<T, E>,
-) -> impl Future<Item = (S, T), Error = E> {
-    let mut state = Some(state);
-    future::poll_fn(move || {
-        let val = try_ready!(f(state.as_mut().unwrap()));
-        Ok((state.take().unwrap(), val).into())
-    })
-}
-
 pub fn first_ok<Fut: IntoFuture>(
     items: impl IntoIterator<Item = Fut>,
 ) -> impl Future<Item = Fut::Item, Error = Fut::Error> {
