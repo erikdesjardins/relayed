@@ -11,13 +11,14 @@ use tokio::runtime::current_thread::Runtime;
 use tokio::timer::Delay;
 
 use backoff::Backoff;
+use config::BACKOFF_SECS;
 use future::first_ok;
 use magic;
 use stream;
 use tcp;
 
 pub fn run(gateway: &[SocketAddr], private: &[SocketAddr], retry: bool) -> Result<(), io::Error> {
-    let backoff = Backoff::new(1..=64);
+    let backoff = Backoff::new(BACKOFF_SECS);
 
     let active = Rc::new(AtomicUsize::new(0));
 

@@ -2,13 +2,13 @@ use std::io;
 use std::net::SocketAddr;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering::*};
-use std::time::Duration;
 
 use tokio::executor::current_thread::spawn;
 use tokio::net::TcpListener;
 use tokio::prelude::*;
 use tokio::runtime::current_thread::Runtime;
 
+use config::{HANDSHAKE_TIMEOUT, TRANSFER_TIMEOUT};
 use future::FutureExt;
 use magic;
 use tcp;
@@ -22,7 +22,7 @@ pub fn run(public: &SocketAddr, gateway: &SocketAddr) -> Result<(), io::Error> {
     let gateway_connections = gateway_connections
         .and_then(|gateway| {
             magic::read_from(gateway)
-                .timeout_after_inactivity(Duration::from_secs(1))
+                .timeout_after_inactivity(HANDSHAKE_TIMEOUT)
                 .then(|r| match r {
                     Ok((gateway, _)) => {
                         info!("Client handshake succeeded");
@@ -46,7 +46,7 @@ pub fn run(public: &SocketAddr, gateway: &SocketAddr) -> Result<(), io::Error> {
                 // write to notify client that this connection is in use (even if the public side doesn't send anything)
                 magic::write_to(gateway)
                     .and_then(move |gateway| tcp::conjoin(public, gateway))
-                    .timeout_after_inactivity(Duration::from_secs(5))
+                    .timeout_after_inactivity(TRANSFER_TIMEOUT)
                     .then(move |r| {
                         let active = active.fetch_sub(1, SeqCst) - 1;
                         Ok(match r {

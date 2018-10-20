@@ -2,6 +2,8 @@ use std::io::{self, ErrorKind::*};
 
 use tokio::prelude::*;
 
+use config::BUFFER_SIZE;
+
 pub fn conjoin(
     mut a: impl AsyncRead + AsyncWrite,
     mut b: impl AsyncRead + AsyncWrite,
@@ -22,7 +24,7 @@ struct Buf {
     pos: usize,
     cap: usize,
     amt: u64,
-    buf: [u8; 4096],
+    buf: [u8; BUFFER_SIZE],
 }
 
 enum BufState {
@@ -38,7 +40,7 @@ impl Buf {
             pos: 0,
             cap: 0,
             amt: 0,
-            buf: [0; 4096],
+            buf: [0; BUFFER_SIZE],
         }
     }
 
