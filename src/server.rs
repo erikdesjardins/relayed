@@ -43,8 +43,8 @@ pub fn run(public_addr: &SocketAddr, gateway_addr: &SocketAddr) -> Result<(), io
     // only poll gateway connections after a public connection is ready,
     // so we do the client handshake immediately before conjoining the two,
     // so we can be reasonably sure that the client didn't disappear after completing the handshake
-    let server = zip_left_then_right(public_connections, gateway_connections)
-        .for_each(move |(public, gateway)| {
+    let server = zip_left_then_right(public_connections, gateway_connections).for_each(
+        move |(public, gateway)| {
             info!("Spawning ({} active)", active.fetch_add(1, SeqCst) + 1);
             let active = active.clone();
             Ok(spawn(
@@ -53,12 +53,15 @@ pub fn run(public_addr: &SocketAddr, gateway_addr: &SocketAddr) -> Result<(), io
                     .then(move |r| {
                         let active = active.fetch_sub(1, SeqCst) - 1;
                         Ok(match r {
-                            Ok(((down, up), _)) => info!("Closing ({} active): {}/{}", active, down, up),
+                            Ok(((down, up), _)) => {
+                                info!("Closing ({} active): {}/{}", active, down, up)
+                            }
                             Err((e, _)) => info!("Closing ({} active): {}", active, e),
                         })
                     }),
             ))
-        });
+        },
+    );
 
     Runtime::new()?.block_on(server)
 }
