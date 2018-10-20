@@ -17,7 +17,11 @@ use magic;
 use stream;
 use tcp;
 
-pub fn run(gateway: &[SocketAddr], private: &[SocketAddr], retry: bool) -> Result<(), io::Error> {
+pub fn run(
+    gateway_addrs: &[SocketAddr],
+    private_addrs: &[SocketAddr],
+    retry: bool,
+) -> Result<(), io::Error> {
     let backoff = Backoff::new(BACKOFF_SECS);
 
     let active = Rc::new(AtomicUsize::new(0));
@@ -26,7 +30,7 @@ pub fn run(gateway: &[SocketAddr], private: &[SocketAddr], retry: bool) -> Resul
         future::ok(())
             .and_then(|()| {
                 info!("Connecting to gateway");
-                first_ok(gateway.iter().map(TcpStream::connect))
+                first_ok(gateway_addrs.iter().map(TcpStream::connect))
             }).and_then(|gateway| {
                 info!("Waiting for handshake");
                 magic::read_from(gateway)
@@ -35,7 +39,7 @@ pub fn run(gateway: &[SocketAddr], private: &[SocketAddr], retry: bool) -> Resul
                 magic::write_to(gateway)
             }).and_then(|gateway| {
                 info!("Connecting to private");
-                first_ok(private.iter().map(TcpStream::connect))
+                first_ok(private_addrs.iter().map(TcpStream::connect))
                     .map(move |private| (gateway, private))
             }).and_then(|(gateway, private)| {
                 info!("Spawning ({} active)", active.fetch_add(1, SeqCst) + 1);

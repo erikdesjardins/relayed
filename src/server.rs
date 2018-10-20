@@ -14,11 +14,11 @@ use magic;
 use stream::zip_left_then_right;
 use tcp;
 
-pub fn run(public: &SocketAddr, gateway: &SocketAddr) -> Result<(), io::Error> {
-    info!("Binding to public {}", public);
-    let public_connections = TcpListener::bind(public)?.incoming();
-    info!("Binding to gateway {}", gateway);
-    let gateway_connections = TcpListener::bind(gateway)?.incoming();
+pub fn run(public_addr: &SocketAddr, gateway_addr: &SocketAddr) -> Result<(), io::Error> {
+    info!("Binding to public {}", public_addr);
+    let public_connections = TcpListener::bind(public_addr)?.incoming();
+    info!("Binding to gateway {}", gateway_addr);
+    let gateway_connections = TcpListener::bind(gateway_addr)?.incoming();
 
     let gateway_connections = gateway_connections
         .and_then(|gateway| {
