@@ -23,6 +23,8 @@ pub fn run(
     private_addrs: &[SocketAddr],
     retry: bool,
 ) -> Result<(), io::Error> {
+    let mut runtime = Runtime::new()?;
+
     let backoff = Backoff::new(BACKOFF_SECS);
 
     let active = Rc::new(AtomicUsize::new(0));
@@ -33,10 +35,13 @@ pub fn run(
                 info!("Connecting to gateway");
                 first_ok(gateway_addrs.iter().map(TcpStream::connect))
             }).and_then(|gateway| {
-                info!("Waiting for handshake");
+                info!("Sending early handshake");
+                magic::write_to(gateway)
+            }).and_then(|gateway| {
+                info!("Waiting for late handshake");
                 magic::read_from(gateway)
             }).and_then(|gateway| {
-                info!("Sending handshake response");
+                info!("Sending late handshake response");
                 magic::write_to(gateway)
             }).and_then(|gateway| {
                 info!("Connecting to private");
@@ -70,5 +75,5 @@ pub fn run(
             })
     }).for_each(Ok);
 
-    Runtime::new()?.block_on(client)
+    runtime.block_on(client)
 }

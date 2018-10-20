@@ -3,6 +3,7 @@ use std::net::SocketAddr;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering::*};
 
+use futures::sync::mpsc;
 use tokio::executor::current_thread::spawn;
 use tokio::net::TcpListener;
 use tokio::prelude::*;
@@ -15,11 +16,35 @@ use stream::zip_left_then_right;
 use tcp;
 
 pub fn run(public_addr: &SocketAddr, gateway_addr: &SocketAddr) -> Result<(), io::Error> {
+    let mut runtime = Runtime::new()?;
+
     info!("Binding to public {}", public_addr);
     let public_connections = TcpListener::bind(public_addr)?.incoming();
     info!("Binding to gateway {}", gateway_addr);
     let gateway_connections = TcpListener::bind(gateway_addr)?.incoming();
 
+    // early handshake: immediately kill unknown connections
+    let gateway_connections = gateway_connections
+        .and_then(|gateway| {
+            future::ok(gateway)
+                .and_then(magic::read_from)
+                .timeout_after_inactivity(HANDSHAKE_TIMEOUT)
+                .then(|r| match r {
+                    Ok((gateway, _)) => {
+                        info!("Early handshake succeeded");
+                        Ok(Some(gateway))
+                    }
+                    Err((e, _)) => {
+                        info!("Early handshake failed: {}", e);
+                        Ok(None)
+                    }
+                })
+        }).filter_map(|x| x);
+
+    let gateway_connections = mpsc::spawn_unbounded(gateway_connections, &runtime.handle());
+
+    // late handshake: ensure that client hasn't disappeared some time after early handshake
+    // and notify client that this connection is going to be used so it should open a new one
     let gateway_connections = gateway_connections
         .and_then(|gateway| {
             future::ok(gateway)
@@ -28,11 +53,11 @@ pub fn run(public_addr: &SocketAddr, gateway_addr: &SocketAddr) -> Result<(), io
                 .timeout_after_inactivity(HANDSHAKE_TIMEOUT)
                 .then(|r| match r {
                     Ok((gateway, _)) => {
-                        info!("Client handshake succeeded");
+                        info!("Late handshake succeeded");
                         Ok(Some(gateway))
                     }
                     Err((e, _)) => {
-                        info!("Client handshake failed: {}", e);
+                        info!("Late handshake failed: {}", e);
                         Ok(None)
                     }
                 })
@@ -40,9 +65,6 @@ pub fn run(public_addr: &SocketAddr, gateway_addr: &SocketAddr) -> Result<(), io
 
     let active = Rc::new(AtomicUsize::new(0));
 
-    // only poll gateway connections after a public connection is ready,
-    // so we do the client handshake immediately before conjoining the two,
-    // so we can be reasonably sure that the client didn't disappear after completing the handshake
     let server = zip_left_then_right(public_connections, gateway_connections).for_each(
         move |(public, gateway)| {
             info!("Spawning ({} active)", active.fetch_add(1, SeqCst) + 1);
@@ -63,5 +85,5 @@ pub fn run(public_addr: &SocketAddr, gateway_addr: &SocketAddr) -> Result<(), io
         },
     );
 
-    Runtime::new()?.block_on(server)
+    runtime.block_on(server)
 }
