@@ -27,7 +27,7 @@ pub fn run(
 
     let active = Rc::new(AtomicUsize::new(0));
 
-    let server = stream::repeat_with(|| {
+    let client = stream::repeat_with(|| {
         future::ok(())
             .and_then(|()| {
                 info!("Connecting to gateway");
@@ -70,5 +70,5 @@ pub fn run(
             })
     }).for_each(Ok);
 
-    Runtime::new()?.block_on(server)
+    Runtime::new()?.block_on(client)
 }
