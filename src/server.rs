@@ -11,6 +11,7 @@ use tokio::runtime::current_thread::Runtime;
 use config::{HANDSHAKE_TIMEOUT, TRANSFER_TIMEOUT};
 use future::FutureExt;
 use magic;
+use stream::zip_left_then_right;
 use tcp;
 
 pub fn run(public: &SocketAddr, gateway: &SocketAddr) -> Result<(), io::Error> {
@@ -21,7 +22,9 @@ pub fn run(public: &SocketAddr, gateway: &SocketAddr) -> Result<(), io::Error> {
 
     let gateway_connections = gateway_connections
         .and_then(|gateway| {
-            magic::read_from(gateway)
+            future::ok(gateway)
+                .and_then(magic::write_to)
+                .and_then(magic::read_from)
                 .timeout_after_inactivity(HANDSHAKE_TIMEOUT)
                 .then(|r| match r {
                     Ok((gateway, _)) => {
@@ -37,15 +40,15 @@ pub fn run(public: &SocketAddr, gateway: &SocketAddr) -> Result<(), io::Error> {
 
     let active = Rc::new(AtomicUsize::new(0));
 
-    let server = public_connections
-        .zip(gateway_connections)
+    // only poll gateway connections after a public connection is ready,
+    // so we do the client handshake immediately before conjoining the two,
+    // so we can be reasonably sure that the client didn't disappear after completing the handshake
+    let server = zip_left_then_right(public_connections, gateway_connections)
         .for_each(move |(public, gateway)| {
             info!("Spawning ({} active)", active.fetch_add(1, SeqCst) + 1);
             let active = active.clone();
             Ok(spawn(
-                // write to notify client that this connection is in use (even if the public side doesn't send anything)
-                magic::write_to(gateway)
-                    .and_then(move |gateway| tcp::conjoin(public, gateway))
+                tcp::conjoin(public, gateway)
                     .timeout_after_inactivity(TRANSFER_TIMEOUT)
                     .then(move |r| {
                         let active = active.fetch_sub(1, SeqCst) - 1;

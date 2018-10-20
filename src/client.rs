@@ -28,11 +28,11 @@ pub fn run(gateway: &[SocketAddr], private: &[SocketAddr], retry: bool) -> Resul
                 info!("Connecting to gateway");
                 first_ok(gateway.iter().map(TcpStream::connect))
             }).and_then(|gateway| {
-                info!("Sending handshake");
-                magic::write_to(gateway)
-            }).and_then(|gateway| {
-                info!("Waiting for handshake response");
+                info!("Waiting for handshake");
                 magic::read_from(gateway)
+            }).and_then(|gateway| {
+                info!("Sending handshake response");
+                magic::write_to(gateway)
             }).and_then(|gateway| {
                 info!("Connecting to private");
                 first_ok(private.iter().map(TcpStream::connect))
