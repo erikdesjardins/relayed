@@ -1,4 +1,4 @@
-use std::io::{self, ErrorKind::*};
+use std::io;
 use std::net::SocketAddr;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering::*};
@@ -12,6 +12,7 @@ use tokio::timer::Delay;
 
 use backoff::Backoff;
 use config::BACKOFF_SECS;
+use err;
 use future::first_ok;
 use magic;
 use stream;
@@ -62,7 +63,7 @@ pub fn run(
                     warn!("Retrying in {} seconds", seconds);
                     future::Either::B(
                         Delay::new(Instant::now() + Duration::from_secs(seconds as u64))
-                            .map_err(|e| io::Error::new(Other, e)),
+                            .map_err(err::to_io()),
                     )
                 }
                 Err(e) => future::Either::A(future::err(e)),

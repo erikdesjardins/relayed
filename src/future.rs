@@ -1,10 +1,12 @@
-use std::io::{self, ErrorKind::*};
+use std::io;
 use std::marker::PhantomData;
 use std::time::{Duration, Instant};
 
 use futures::Select;
 use tokio::prelude::*;
 use tokio::timer::Delay;
+
+use err;
 
 pub fn first_ok<Fut: IntoFuture>(
     items: impl IntoIterator<Item = Fut>,
@@ -52,7 +54,7 @@ where
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         self.poll_count += 1;
-        try_ready!(self.delay.poll().map_err(|e| io::Error::new(Other, e)));
+        try_ready!(self.delay.poll().map_err(err::to_io()));
         // timer expired, but has anything else happened in the meantime?
         if self.poll_count > 1 {
             // something else has been polled: reset the timer
@@ -60,9 +62,9 @@ where
             self.delay = Delay::new(Instant::now() + self.time);
             // poll the new timer to start it--this should always be not ready,
             // but if it is somehow ready immediately that's still technically correct
-            try_ready!(self.delay.poll().map_err(|e| io::Error::new(Other, e)));
+            try_ready!(self.delay.poll().map_err(err::to_io()));
         }
         // nothing has been polled but the timer expiry, i.e. we've been inactive the whole time
-        Err(Fut::Error::from(TimedOut.into()))
+        Err(Fut::Error::from(io::ErrorKind::TimedOut.into()))
     }
 }
