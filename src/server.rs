@@ -2,34 +2,62 @@ use std::io;
 use std::net::SocketAddr;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering::*};
-use std::time::Duration;
 
+use futures::sync::mpsc;
 use tokio::executor::current_thread::spawn;
 use tokio::net::TcpListener;
 use tokio::prelude::*;
 use tokio::runtime::current_thread::Runtime;
 
-use future::timeout_after_inactivity;
+use config::{HANDSHAKE_TIMEOUT, TRANSFER_TIMEOUT};
+use future::FutureExt;
 use magic;
+use stream::zip_left_then_right;
 use tcp;
 
-pub fn run(public: &SocketAddr, gateway: &SocketAddr) -> Result<(), io::Error> {
-    info!("Binding to public {}", public);
-    let public_connections = TcpListener::bind(public)?.incoming();
-    info!("Binding to gateway {}", gateway);
-    let gateway_connections = TcpListener::bind(gateway)?.incoming();
+pub fn run(public_addr: &SocketAddr, gateway_addr: &SocketAddr) -> Result<(), io::Error> {
+    let mut runtime = Runtime::new()?;
 
+    info!("Binding to public {}", public_addr);
+    let public_connections = TcpListener::bind(public_addr)?.incoming();
+    info!("Binding to gateway {}", gateway_addr);
+    let gateway_connections = TcpListener::bind(gateway_addr)?.incoming();
+
+    // early handshake: immediately kill unknown connections
     let gateway_connections = gateway_connections
         .and_then(|gateway| {
-            magic::read_from(gateway)
-                .select(timeout_after_inactivity(Duration::from_secs(1)))
+            future::ok(gateway)
+                .and_then(magic::read_from)
+                .timeout_after_inactivity(HANDSHAKE_TIMEOUT)
                 .then(|r| match r {
                     Ok((gateway, _)) => {
-                        info!("Client handshake succeeded");
+                        info!("Early handshake succeeded");
                         Ok(Some(gateway))
                     }
                     Err((e, _)) => {
-                        info!("Client handshake failed: {}", e);
+                        info!("Early handshake failed: {}", e);
+                        Ok(None)
+                    }
+                })
+        }).filter_map(|x| x);
+
+    let gateway_connections = mpsc::spawn_unbounded(gateway_connections, &runtime.handle());
+
+    // late handshake: ensure that client hasn't disappeared some time after early handshake
+    // and notify client that this connection is going to be used so it should open a new one
+    let gateway_connections = gateway_connections
+        .and_then(|gateway| {
+            future::ok(gateway)
+                .and_then(magic::write_to)
+                .and_then(magic::read_from)
+                .timeout_after_inactivity(HANDSHAKE_TIMEOUT)
+                .then(|r| match r {
+                    Ok((gateway, _)) => {
+                        info!("Late handshake succeeded");
+                        Ok(Some(gateway))
+                    }
+                    Err((e, _)) => {
+                        info!("Late handshake failed: {}", e);
                         Ok(None)
                     }
                 })
@@ -37,25 +65,25 @@ pub fn run(public: &SocketAddr, gateway: &SocketAddr) -> Result<(), io::Error> {
 
     let active = Rc::new(AtomicUsize::new(0));
 
-    let server = public_connections
-        .zip(gateway_connections)
-        .for_each(move |(public, gateway)| {
+    let server = zip_left_then_right(public_connections, gateway_connections).for_each(
+        move |(public, gateway)| {
             info!("Spawning ({} active)", active.fetch_add(1, SeqCst) + 1);
             let active = active.clone();
             Ok(spawn(
-                // write to notify client that this connection is in use (even if the public side doesn't send anything)
-                magic::write_to(gateway)
-                    .and_then(move |gateway| tcp::conjoin(public, gateway))
-                    .select(timeout_after_inactivity(Duration::from_secs(5)))
+                tcp::conjoin(public, gateway)
+                    .timeout_after_inactivity(TRANSFER_TIMEOUT)
                     .then(move |r| {
                         let active = active.fetch_sub(1, SeqCst) - 1;
                         Ok(match r {
-                            Ok(((down, up), _)) => info!("Closing ({} active): {}/{}", active, down, up),
+                            Ok(((down, up), _)) => {
+                                info!("Closing ({} active): {}/{}", active, down, up)
+                            }
                             Err((e, _)) => info!("Closing ({} active): {}", active, e),
                         })
                     }),
             ))
-        });
+        },
+    );
 
-    Runtime::new()?.block_on(server)
+    runtime.block_on(server)
 }

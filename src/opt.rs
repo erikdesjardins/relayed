@@ -1,4 +1,4 @@
-use std::io::{self, ErrorKind::*};
+use std::io;
 use std::net::{SocketAddr, ToSocketAddrs};
 
 /// Trivial wrapper to avoid structopt special-casing `Vec`
@@ -25,11 +25,11 @@ pub enum Mode {
     /// Run the server half on a public machine
     #[structopt(name = "server")]
     Server {
-        /// Port to receive public traffic on
-        public: u16,
-
         /// Port to receive gateway connections from client
         gateway: u16,
+
+        /// Port to receive public traffic on
+        public: u16,
     },
     /// Run the client half on a private machine
     #[structopt(name = "client")]
@@ -52,7 +52,7 @@ fn socket_addrs(arg: &str) -> Result<A<Vec<SocketAddr>>, io::Error> {
     let addrs = arg.to_socket_addrs()?.collect::<Vec<_>>();
     match addrs.len() {
         0 => Err(io::Error::new(
-            AddrNotAvailable,
+            io::ErrorKind::AddrNotAvailable,
             "Resolved to zero addresses",
         )),
         _ => Ok(A(addrs)),

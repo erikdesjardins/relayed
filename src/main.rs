@@ -12,6 +12,7 @@ extern crate tokio;
 
 mod backoff;
 mod client;
+mod config;
 mod err;
 mod future;
 mod magic;

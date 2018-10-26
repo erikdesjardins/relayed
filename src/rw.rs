@@ -1,6 +1,8 @@
-use std::io::{self, ErrorKind::*};
+use std::io;
 
 use tokio::prelude::*;
+
+use config::BUFFER_SIZE;
 
 pub fn conjoin(
     mut a: impl AsyncRead + AsyncWrite,
@@ -22,7 +24,7 @@ struct Buf {
     pos: usize,
     cap: usize,
     amt: u64,
-    buf: [u8; 4096],
+    buf: [u8; BUFFER_SIZE],
 }
 
 enum BufState {
@@ -38,7 +40,7 @@ impl Buf {
             pos: 0,
             cap: 0,
             amt: 0,
-            buf: [0; 4096],
+            buf: [0; BUFFER_SIZE],
         }
     }
 
@@ -63,7 +65,7 @@ impl Buf {
                     while self.pos < self.cap {
                         let i = try_ready!(writer.poll_write(&self.buf[self.pos..self.cap]));
                         if i == 0 {
-                            return Err(io::Error::new(WriteZero, "writer accepted zero bytes"));
+                            return Err(io::ErrorKind::WriteZero.into());
                         } else {
                             self.pos += i;
                             self.amt += i as u64;

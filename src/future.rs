@@ -1,19 +1,12 @@
-use std::io::{self, ErrorKind::*};
+use std::io;
+use std::marker::PhantomData;
 use std::time::{Duration, Instant};
 
+use futures::Select;
 use tokio::prelude::*;
 use tokio::timer::Delay;
 
-pub fn poll_with<S, T, E>(
-    state: S,
-    mut f: impl FnMut(&mut S) -> Poll<T, E>,
-) -> impl Future<Item = (S, T), Error = E> {
-    let mut state = Some(state);
-    future::poll_fn(move || {
-        let val = try_ready!(f(state.as_mut().unwrap()));
-        Ok((state.take().unwrap(), val).into())
-    })
-}
+use err;
 
 pub fn first_ok<Fut: IntoFuture>(
     items: impl IntoIterator<Item = Fut>,
@@ -21,22 +14,57 @@ pub fn first_ok<Fut: IntoFuture>(
     future::select_ok(items).map(|(x, _)| x)
 }
 
-pub fn timeout_after_inactivity<T>(time: Duration) -> impl Future<Item = T, Error = io::Error> {
-    let mut poll_count = 0u32;
-    let mut delay = Delay::new(Instant::now() + time);
-    future::poll_fn(move || {
-        poll_count += 1;
-        try_ready!(delay.poll().map_err(|e| io::Error::new(Other, e)));
+pub trait FutureExt: Future + Sized {
+    fn timeout_after_inactivity(self, time: Duration) -> Select<Self, Timeout<Self>>
+    where
+        Self::Error: From<io::Error>;
+}
+
+impl<T> FutureExt for T
+where
+    T: Future,
+{
+    fn timeout_after_inactivity(self, time: Duration) -> Select<Self, Timeout<Self>>
+    where
+        Self::Error: From<io::Error>,
+    {
+        self.select(Timeout {
+            time,
+            poll_count: 0,
+            delay: Delay::new(Instant::now() + time),
+            _fut: PhantomData,
+        })
+    }
+}
+
+pub struct Timeout<Fut> {
+    time: Duration,
+    poll_count: u64,
+    delay: Delay,
+    _fut: PhantomData<Fut>,
+}
+
+impl<Fut> Future for Timeout<Fut>
+where
+    Fut: Future,
+    Fut::Error: From<io::Error>,
+{
+    type Item = Fut::Item;
+    type Error = Fut::Error;
+
+    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        self.poll_count += 1;
+        try_ready!(self.delay.poll().map_err(err::to_io()));
         // timer expired, but has anything else happened in the meantime?
-        if poll_count > 1 {
+        if self.poll_count > 1 {
             // something else has been polled: reset the timer
-            poll_count = 0;
-            delay = Delay::new(Instant::now() + time);
+            self.poll_count = 0;
+            self.delay = Delay::new(Instant::now() + self.time);
             // poll the new timer to start it--this should always be not ready,
             // but if it is somehow ready immediately that's still technically correct
-            try_ready!(delay.poll().map_err(|e| io::Error::new(Other, e)));
+            try_ready!(self.delay.poll().map_err(err::to_io()));
         }
         // nothing has been polled but the timer expiry, i.e. we've been inactive the whole time
-        Err(io::Error::from(TimedOut))
-    })
+        Err(Fut::Error::from(io::ErrorKind::TimedOut.into()))
+    }
 }
