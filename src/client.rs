@@ -4,6 +4,7 @@ use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering::*};
 use std::time::{Duration, Instant};
 
+use log::{error, info, warn};
 use tokio::executor::current_thread::spawn;
 use tokio::net::TcpStream;
 use tokio::prelude::*;

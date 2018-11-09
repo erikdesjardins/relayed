@@ -1,6 +1,8 @@
 use std::io;
 use std::net::{SocketAddr, ToSocketAddrs};
 
+use structopt::StructOpt;
+
 /// Trivial wrapper to avoid structopt special-casing `Vec`
 #[derive(Debug)]
 pub struct A<T>(pub T);

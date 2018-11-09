@@ -2,7 +2,7 @@ use std::io;
 use std::marker::PhantomData;
 use std::time::{Duration, Instant};
 
-use futures::Select;
+use futures::{try_ready, Select};
 use tokio::prelude::*;
 use tokio::timer::Delay;
 

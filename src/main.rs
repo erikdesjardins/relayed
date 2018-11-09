@@ -2,11 +2,8 @@
 #![allow(unit_arg)]
 
 extern crate env_logger;
-#[macro_use]
 extern crate futures;
-#[macro_use]
 extern crate log;
-#[macro_use]
 extern crate structopt;
 extern crate tokio;
 

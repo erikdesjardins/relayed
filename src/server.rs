@@ -4,6 +4,7 @@ use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering::*};
 
 use futures::sync::mpsc;
+use log::{info};
 use tokio::executor::current_thread::spawn;
 use tokio::net::TcpListener;
 use tokio::prelude::*;

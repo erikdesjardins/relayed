@@ -1,3 +1,4 @@
+use futures::try_ready;
 use tokio::prelude::*;
 
 pub fn repeat_with<Fut, T, E>(mut f: impl FnMut() -> Fut) -> impl Stream<Item = T, Error = E>
