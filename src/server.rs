@@ -4,7 +4,7 @@ use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering::*};
 
 use futures::sync::mpsc;
-use log::{info};
+use log::{debug, info};
 use tokio::executor::current_thread::spawn;
 use tokio::net::TcpListener;
 use tokio::prelude::*;
@@ -32,11 +32,11 @@ pub fn run(public_addr: &SocketAddr, gateway_addr: &SocketAddr) -> Result<(), io
                 .timeout_after_inactivity(HANDSHAKE_TIMEOUT)
                 .then(|r| match r {
                     Ok((gateway, _)) => {
-                        info!("Early handshake succeeded");
+                        debug!("Early handshake succeeded");
                         Ok(Some(gateway))
                     }
                     Err((e, _)) => {
-                        info!("Early handshake failed: {}", e);
+                        debug!("Early handshake failed: {}", e);
                         Ok(None)
                     }
                 })
@@ -54,11 +54,11 @@ pub fn run(public_addr: &SocketAddr, gateway_addr: &SocketAddr) -> Result<(), io
                 .timeout_after_inactivity(HANDSHAKE_TIMEOUT)
                 .then(|r| match r {
                     Ok((gateway, _)) => {
-                        info!("Late handshake succeeded");
+                        debug!("Late handshake succeeded");
                         Ok(Some(gateway))
                     }
                     Err((e, _)) => {
-                        info!("Late handshake failed: {}", e);
+                        debug!("Late handshake failed: {}", e);
                         Ok(None)
                     }
                 })

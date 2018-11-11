@@ -4,7 +4,7 @@ use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering::*};
 use std::time::{Duration, Instant};
 
-use log::{error, info, warn};
+use log::{debug, error, info, warn};
 use tokio::executor::current_thread::spawn;
 use tokio::net::TcpStream;
 use tokio::prelude::*;
@@ -33,19 +33,19 @@ pub fn run(
     let client = stream::repeat_with(|| {
         future::ok(())
             .and_then(|()| {
-                info!("Connecting to gateway");
+                debug!("Connecting to gateway");
                 first_ok(gateway_addrs.iter().map(TcpStream::connect))
             }).and_then(|gateway| {
-                info!("Sending early handshake");
+                debug!("Sending early handshake");
                 magic::write_to(gateway)
             }).and_then(|gateway| {
-                info!("Waiting for late handshake");
+                debug!("Waiting for late handshake");
                 magic::read_from(gateway)
             }).and_then(|gateway| {
-                info!("Sending late handshake response");
+                debug!("Sending late handshake");
                 magic::write_to(gateway)
             }).and_then(|gateway| {
-                info!("Connecting to private");
+                debug!("Connecting to private");
                 first_ok(private_addrs.iter().map(TcpStream::connect))
                     .map(move |private| (gateway, private))
             }).and_then(|(gateway, private)| {
