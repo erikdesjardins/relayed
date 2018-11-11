@@ -7,12 +7,6 @@ use tokio::timer::Delay;
 
 use err;
 
-pub fn first_ok<Fut: IntoFuture>(
-    items: impl IntoIterator<Item = Fut>,
-) -> impl Future<Item = Fut::Item, Error = Fut::Error> {
-    future::select_ok(items).map(|(x, _)| x)
-}
-
 pub trait FutureExt: Future + Sized {
     fn timeout_after_inactivity(self, time: Duration) -> Timeout<Self>
     where

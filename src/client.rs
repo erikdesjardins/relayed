@@ -15,7 +15,6 @@ use tokio::timer::Delay;
 use backoff::Backoff;
 use config::BACKOFF_SECS;
 use err;
-use future::first_ok;
 use magic;
 use tcp;
 
@@ -33,7 +32,8 @@ pub fn run(
     let client = stream::repeat(())
         .and_then(|()| {
             debug!("Connecting to gateway");
-            first_ok(gateway_addrs.iter().map(TcpStream::connect))
+            future::select_ok(gateway_addrs.iter().map(TcpStream::connect))
+                .map(|(gateway, _)| gateway)
         }).and_then(|gateway| {
             debug!("Sending early handshake");
             magic::write_to(gateway)
@@ -45,8 +45,8 @@ pub fn run(
             magic::write_to(gateway)
         }).and_then(|gateway| {
             debug!("Connecting to private");
-            first_ok(private_addrs.iter().map(TcpStream::connect))
-                .map(move |private| (gateway, private))
+            future::select_ok(private_addrs.iter().map(TcpStream::connect))
+                .map(move |(private, _)| (gateway, private))
         }).and_then(|(gateway, private)| {
             info!("Spawning ({} active)", active.fetch_add(1, SeqCst) + 1);
             let active = active.clone();
