@@ -15,6 +15,7 @@ use tokio::timer::Delay;
 use backoff::Backoff;
 use config::BACKOFF_SECS;
 use err;
+use heartbeat;
 use magic;
 use tcp;
 
@@ -38,8 +39,8 @@ pub fn run(
             debug!("Sending early handshake");
             magic::write_to(gateway)
         }).and_then(|gateway| {
-            debug!("Waiting for late handshake");
-            magic::read_from(gateway)
+            debug!("Waiting for end of heartbeat");
+            heartbeat::read_from(gateway)
         }).and_then(|gateway| {
             debug!("Sending late handshake");
             magic::write_to(gateway)
