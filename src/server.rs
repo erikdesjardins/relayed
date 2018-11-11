@@ -86,6 +86,7 @@ pub fn run(public_addr: &SocketAddr, gateway_addr: &SocketAddr) -> Result<(), io
                     Ok(Async::NotReady) => return Ok(Async::NotReady),
                     Ok(Async::Ready(gateway)) => {
                         debug!("Heartbeat completed");
+                        assert!(yield_requested);
                         yield_requested = false;
                         to_return = Some(Ok(Some(gateway).into()));
                         None
