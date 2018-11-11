@@ -29,7 +29,7 @@ pub fn run(public_addr: &SocketAddr, gateway_addr: &SocketAddr) -> Result<(), io
         .and_then(|gateway| {
             future::ok(gateway)
                 .and_then(magic::read_from)
-                .timeout_after_inactivity(HANDSHAKE_TIMEOUT)
+                .timeout(HANDSHAKE_TIMEOUT)
                 .then(|r| match r {
                     Ok(gateway) => {
                         debug!("Early handshake succeeded");
@@ -51,7 +51,7 @@ pub fn run(public_addr: &SocketAddr, gateway_addr: &SocketAddr) -> Result<(), io
             future::ok(gateway)
                 .and_then(magic::write_to)
                 .and_then(magic::read_from)
-                .timeout_after_inactivity(HANDSHAKE_TIMEOUT)
+                .timeout(HANDSHAKE_TIMEOUT)
                 .then(|r| match r {
                     Ok(gateway) => {
                         debug!("Late handshake succeeded");
