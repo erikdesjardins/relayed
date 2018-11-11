@@ -1,5 +1,6 @@
 use std::io;
 
+use futures::try_ready;
 use tokio::prelude::*;
 
 use config::BUFFER_SIZE;

@@ -2,11 +2,8 @@
 #![allow(unit_arg)]
 
 extern crate env_logger;
-#[macro_use]
 extern crate futures;
-#[macro_use]
 extern crate log;
-#[macro_use]
 extern crate structopt;
 extern crate tokio;
 
@@ -15,7 +12,9 @@ mod client;
 mod config;
 mod err;
 mod future;
+mod heartbeat;
 mod magic;
+mod never;
 mod opt;
 mod rw;
 mod server;

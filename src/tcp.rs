@@ -1,6 +1,7 @@
 use std::io;
 use std::net::Shutdown;
 
+use futures::try_ready;
 use tokio::net::TcpStream;
 use tokio::prelude::*;
 
