@@ -85,7 +85,7 @@ pub fn run(public_addr: &SocketAddr, gateway_addr: &SocketAddr) -> Result<(), io
                 Some((ref mut heartbeat, _)) => match heartbeat.poll() {
                     Ok(Async::NotReady) => return Ok(Async::NotReady),
                     Ok(Async::Ready(gateway)) => {
-                        debug!("Heartbeat stopping");
+                        debug!("Heartbeat completed");
                         yield_requested = false;
                         to_return = Some(Ok(Some(gateway).into()));
                         None
