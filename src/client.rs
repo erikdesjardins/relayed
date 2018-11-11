@@ -16,7 +16,7 @@ use config::BACKOFF_SECS;
 use err;
 use future::first_ok;
 use magic;
-use stream;
+use stream::repeat_with;
 use tcp;
 
 pub fn run(
@@ -30,7 +30,7 @@ pub fn run(
 
     let active = Rc::new(AtomicUsize::new(0));
 
-    let client = stream::repeat_with(|| {
+    let client = repeat_with(|| {
         future::ok(())
             .and_then(|()| {
                 debug!("Connecting to gateway");
