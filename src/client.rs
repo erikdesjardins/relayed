@@ -4,6 +4,7 @@ use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering::*};
 use std::time::{Duration, Instant};
 
+use futures::future::Either;
 use log::{debug, error, info, warn};
 use tokio::executor::current_thread::spawn;
 use tokio::net::TcpStream;
@@ -61,18 +62,18 @@ pub fn run(
             }).then(|r| match r {
                 Ok(()) => {
                     backoff.reset();
-                    future::Either::A(future::ok(()))
+                    Either::A(future::ok(()))
                 }
                 Err(ref e) if retry => {
                     error!("{}", e);
                     let seconds = backoff.get();
                     warn!("Retrying in {} seconds", seconds);
-                    future::Either::B(
+                    Either::B(
                         Delay::new(Instant::now() + Duration::from_secs(seconds as u64))
                             .map_err(err::to_io()),
                     )
                 }
-                Err(e) => future::Either::A(future::err(e)),
+                Err(e) => Either::A(future::err(e)),
             })
     }).for_each(Ok);
 
