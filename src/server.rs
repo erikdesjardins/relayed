@@ -31,11 +31,11 @@ pub fn run(public_addr: &SocketAddr, gateway_addr: &SocketAddr) -> Result<(), io
                 .and_then(magic::read_from)
                 .timeout_after_inactivity(HANDSHAKE_TIMEOUT)
                 .then(|r| match r {
-                    Ok((gateway, _)) => {
+                    Ok(gateway) => {
                         debug!("Early handshake succeeded");
                         Ok(Some(gateway))
                     }
-                    Err((e, _)) => {
+                    Err(e) => {
                         debug!("Early handshake failed: {}", e);
                         Ok(None)
                     }
@@ -53,11 +53,11 @@ pub fn run(public_addr: &SocketAddr, gateway_addr: &SocketAddr) -> Result<(), io
                 .and_then(magic::read_from)
                 .timeout_after_inactivity(HANDSHAKE_TIMEOUT)
                 .then(|r| match r {
-                    Ok((gateway, _)) => {
+                    Ok(gateway) => {
                         debug!("Late handshake succeeded");
                         Ok(Some(gateway))
                     }
-                    Err((e, _)) => {
+                    Err(e) => {
                         debug!("Late handshake failed: {}", e);
                         Ok(None)
                     }
@@ -76,10 +76,8 @@ pub fn run(public_addr: &SocketAddr, gateway_addr: &SocketAddr) -> Result<(), io
                     .then(move |r| {
                         let active = active.fetch_sub(1, SeqCst) - 1;
                         Ok(match r {
-                            Ok(((down, up), _)) => {
-                                info!("Closing ({} active): {}/{}", active, down, up)
-                            }
-                            Err((e, _)) => info!("Closing ({} active): {}", active, e),
+                            Ok((down, up)) => info!("Closing ({} active): {}/{}", active, down, up),
+                            Err(e) => info!("Closing ({} active): {}", active, e),
                         })
                     }),
             ))
