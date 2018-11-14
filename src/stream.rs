@@ -32,36 +32,36 @@ pub fn spawn_idle<T, E, S: Stream<Item = T, Error = E>>(
     executor: &impl Executor<mpsc::Execute<S>>,
     f: impl FnOnce(Requests) -> S,
 ) -> impl Stream<Item = T, Error = E> {
-    enum State {
-        SendingRequest,
-        FlushingRequest,
-        WaitingForResponse,
-    }
-
     let (request, requests) = mpsc::channel(0);
     let mut request = request.sink_map_err(|_| panic!("inner channel never shuts down"));
     let requests = Requests(requests);
 
     let mut responses = mpsc::spawn(f(requests), executor, 0);
 
-    let mut state = State::SendingRequest;
-
-    stream::poll_fn(move || loop {
-        match state {
-            State::SendingRequest => match request.start_send(())? {
-                AsyncSink::NotReady(()) => return Ok(Async::NotReady),
-                AsyncSink::Ready => state = State::FlushingRequest,
-            },
-            State::FlushingRequest => {
-                try_ready!(request.poll_complete());
-                state = State::WaitingForResponse;
-            }
-            State::WaitingForResponse => {
-                let response = try_ready!(responses.poll());
-                state = State::SendingRequest;
-                return Ok(response.into());
-            }
-        };
+    stream::poll_fn({
+        enum State {
+            SendingRequest,
+            FlushingRequest,
+            WaitingForResponse,
+        }
+        let mut state = State::SendingRequest;
+        move || loop {
+            match state {
+                State::SendingRequest => match request.start_send(())? {
+                    AsyncSink::NotReady(()) => return Ok(Async::NotReady),
+                    AsyncSink::Ready => state = State::FlushingRequest,
+                },
+                State::FlushingRequest => {
+                    try_ready!(request.poll_complete());
+                    state = State::WaitingForResponse;
+                }
+                State::WaitingForResponse => {
+                    let response = try_ready!(responses.poll());
+                    state = State::SendingRequest;
+                    return Ok(response.into());
+                }
+            };
+        }
     })
 }
 
