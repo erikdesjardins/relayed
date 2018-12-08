@@ -75,7 +75,8 @@ pub fn run(public_addr: &SocketAddr, gateway_addr: &SocketAddr) -> Result<(), io
                         Ok(None)
                     }
                 })
-        }).filter_map(|x| x);
+        })
+        .filter_map(|x| x);
 
     // heartbeat: so the client can tell if the connection drops
     // (and so the server doesn't accumulate a bunch of dead connections)
@@ -153,7 +154,8 @@ pub fn run(public_addr: &SocketAddr, gateway_addr: &SocketAddr) -> Result<(), io
                         Ok(None)
                     }
                 })
-        }).filter_map(|x| x);
+        })
+        .filter_map(|x| x);
 
     let active = Rc::new(AtomicUsize::new(0));
 

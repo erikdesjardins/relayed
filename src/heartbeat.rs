@@ -40,5 +40,6 @@ pub fn write_to<T: AsyncWrite>(
                     Err(either) => Err(either.split().0),
                 })
         })
-    }).and_then(|writer| write_all(writer, EXIT).map(|(writer, _)| writer))
+    })
+    .and_then(|writer| write_all(writer, EXIT).map(|(writer, _)| writer))
 }

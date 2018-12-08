@@ -28,7 +28,8 @@ fn main() -> Result<(), err::DebugFromDisplay<std::io::Error>> {
             1 => log::LevelFilter::Info,
             2 => log::LevelFilter::Debug,
             _ => log::LevelFilter::Trace,
-        }).init();
+        })
+        .init();
 
     match mode {
         opt::Mode::Server { public, gateway } => server::run(
