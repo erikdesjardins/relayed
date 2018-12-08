@@ -13,13 +13,13 @@ use tokio::prelude::*;
 use tokio::runtime::current_thread::Runtime;
 use tokio::timer::Delay;
 
-use config::{HANDSHAKE_TIMEOUT, QUEUE_TIMEOUT, TRANSFER_TIMEOUT};
-use err;
-use future::FutureExt;
-use heartbeat;
-use magic;
-use stream::{spawn_idle, zip_left_then_right};
-use tcp;
+use crate::config::{HANDSHAKE_TIMEOUT, QUEUE_TIMEOUT, TRANSFER_TIMEOUT};
+use crate::err;
+use crate::future::FutureExt;
+use crate::heartbeat;
+use crate::magic;
+use crate::stream::{spawn_idle, zip_left_then_right};
+use crate::tcp;
 
 pub fn run(public_addr: &SocketAddr, gateway_addr: &SocketAddr) -> Result<(), io::Error> {
     let mut runtime = Runtime::new()?;

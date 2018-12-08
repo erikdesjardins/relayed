@@ -1,11 +1,4 @@
-#![cfg_attr(not(feature = "cargo-clippy"), allow(unknown_lints))]
-#![allow(unit_arg)]
-
-extern crate env_logger;
-extern crate futures;
-extern crate log;
-extern crate structopt;
-extern crate tokio;
+#![allow(clippy::unit_arg)]
 
 mod backoff;
 mod client;

@@ -12,12 +12,12 @@ use tokio::prelude::*;
 use tokio::runtime::current_thread::Runtime;
 use tokio::timer::Delay;
 
-use backoff::Backoff;
-use config::BACKOFF_SECS;
-use err;
-use heartbeat;
-use magic;
-use tcp;
+use crate::backoff::Backoff;
+use crate::config::BACKOFF_SECS;
+use crate::err;
+use crate::heartbeat;
+use crate::magic;
+use crate::tcp;
 
 pub fn run(
     gateway_addrs: &[SocketAddr],

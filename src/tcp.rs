@@ -5,7 +5,7 @@ use futures::try_ready;
 use tokio::net::TcpStream;
 use tokio::prelude::*;
 
-use rw;
+use crate::rw;
 
 pub fn conjoin(a: TcpStream, b: TcpStream) -> impl Future<Item = (u64, u64), Error = io::Error> {
     rw::conjoin(ShutdownOnClose(a), ShutdownOnClose(b))
