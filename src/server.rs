@@ -43,10 +43,8 @@ pub fn run(public_addr: &SocketAddr, gateway_addr: &SocketAddr) -> Result<(), io
                         Delay::new(Instant::now() + QUEUE_TIMEOUT).map_err(err::to_io()),
                     )),
                 },
-                Some(_) => match requests.poll()? {
+                Some((_, ref mut delay)) => match requests.poll()? {
                     Async::NotReady => {
-                        // no NLL :(
-                        let (_, delay) = active_connection.as_mut().unwrap();
                         try_ready!(delay.poll());
                         debug!("Connection expired at idle");
                         None
@@ -105,16 +103,12 @@ pub fn run(public_addr: &SocketAddr, gateway_addr: &SocketAddr) -> Result<(), io
                 }
             }
 
-            let to_return;
-            active_heartbeat = match &mut active_heartbeat {
+            match active_heartbeat {
                 None => return Ok(Async::NotReady),
                 Some((_, ref mut stop_heartbeat @ Some(_))) if yield_requested => {
                     match stop_heartbeat.take().unwrap().send(()) {
                         Ok(()) => continue,
-                        Err(()) => {
-                            to_return = None;
-                            None
-                        }
+                        Err(()) => active_heartbeat = None,
                     }
                 }
                 Some((ref mut heartbeat, _)) => match heartbeat.poll() {
@@ -123,18 +117,14 @@ pub fn run(public_addr: &SocketAddr, gateway_addr: &SocketAddr) -> Result<(), io
                         debug!("Heartbeat completed");
                         assert!(yield_requested);
                         yield_requested = false;
-                        to_return = Some(Ok(Some(gateway).into()));
-                        None
+                        active_heartbeat = None;
+                        return Ok(Some(gateway).into());
                     }
                     Err(e) => {
                         debug!("Heartbeat failed: {}", e);
-                        to_return = None;
-                        None
+                        active_heartbeat = None;
                     }
                 },
-            };
-            if let Some(to_return) = to_return {
-                return to_return;
             }
         })
     });
