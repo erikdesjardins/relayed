@@ -3,7 +3,7 @@ use std::io;
 use futures::try_ready;
 use tokio::prelude::*;
 
-use config::BUFFER_SIZE;
+use crate::config::BUFFER_SIZE;
 
 pub fn conjoin(
     mut a: impl AsyncRead + AsyncWrite,

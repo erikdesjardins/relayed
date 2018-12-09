@@ -6,9 +6,9 @@ use tokio::io::{read_exact, write_all};
 use tokio::prelude::*;
 use tokio::timer::Delay;
 
-use config::HEARTBEAT_TIMEOUT;
-use err;
-use future::FutureExt;
+use crate::config::HEARTBEAT_TIMEOUT;
+use crate::err;
+use crate::future::FutureExt;
 
 const HEARTBEAT: [u8; 1] = [0xdd];
 const EXIT: [u8; 1] = [0x1c];
@@ -40,5 +40,6 @@ pub fn write_to<T: AsyncWrite>(
                     Err(either) => Err(either.split().0),
                 })
         })
-    }).and_then(|writer| write_all(writer, EXIT).map(|(writer, _)| writer))
+    })
+    .and_then(|writer| write_all(writer, EXIT).map(|(writer, _)| writer))
 }

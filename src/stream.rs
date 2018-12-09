@@ -3,7 +3,7 @@ use futures::sync::mpsc;
 use futures::try_ready;
 use tokio::prelude::*;
 
-use never::Never;
+use crate::never::Never;
 
 pub fn zip_left_then_right<L, R, E>(
     mut left: impl Stream<Item = L, Error = E>,

@@ -12,12 +12,12 @@ use tokio::prelude::*;
 use tokio::runtime::current_thread::Runtime;
 use tokio::timer::Delay;
 
-use backoff::Backoff;
-use config::BACKOFF_SECS;
-use err;
-use heartbeat;
-use magic;
-use tcp;
+use crate::backoff::Backoff;
+use crate::config::BACKOFF_SECS;
+use crate::err;
+use crate::heartbeat;
+use crate::magic;
+use crate::tcp;
 
 pub fn run(
     gateway_addrs: &[SocketAddr],
@@ -35,20 +35,25 @@ pub fn run(
             debug!("Connecting to gateway");
             future::select_ok(gateway_addrs.iter().map(TcpStream::connect))
                 .map(|(gateway, _)| gateway)
-        }).and_then(|gateway| {
+        })
+        .and_then(|gateway| {
             debug!("Sending early handshake");
             magic::write_to(gateway)
-        }).and_then(|gateway| {
+        })
+        .and_then(|gateway| {
             debug!("Waiting for end of heartbeat");
             heartbeat::read_from(gateway)
-        }).and_then(|gateway| {
+        })
+        .and_then(|gateway| {
             debug!("Sending late handshake");
             magic::write_to(gateway)
-        }).and_then(|gateway| {
+        })
+        .and_then(|gateway| {
             debug!("Connecting to private");
             future::select_ok(private_addrs.iter().map(TcpStream::connect))
                 .map(move |(private, _)| (gateway, private))
-        }).and_then(|(gateway, private)| {
+        })
+        .and_then(|(gateway, private)| {
             info!("Spawning ({} active)", active.fetch_add(1, SeqCst) + 1);
             let active = active.clone();
             Ok(spawn(tcp::conjoin(gateway, private).then(move |r| {
@@ -58,7 +63,8 @@ pub fn run(
                     Err(e) => info!("Closing ({} active): {}", active, e),
                 })
             })))
-        }).then(|r| match r {
+        })
+        .then(|r| match r {
             Ok(()) => {
                 backoff.reset();
                 Either::A(future::ok(()))
@@ -73,7 +79,8 @@ pub fn run(
                 )
             }
             Err(e) => Either::A(future::err(e)),
-        }).for_each(Ok);
+        })
+        .for_each(Ok);
 
     runtime.block_on(client)
 }

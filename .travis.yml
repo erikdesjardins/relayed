@@ -10,8 +10,8 @@ matrix:
   include:
     - name: Test
       before_script:
-        - rustup component add rustfmt-preview
-        - rustup component add clippy-preview
+        - rustup component add rustfmt
+        - rustup component add clippy
       script:
         - cargo fmt --all -- --check
         - RUSTFLAGS="-D warnings" cargo clippy

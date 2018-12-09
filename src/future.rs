@@ -5,7 +5,7 @@ use futures::try_ready;
 use tokio::prelude::*;
 use tokio::timer::Delay;
 
-use err;
+use crate::err;
 
 pub trait FutureExt: Future + Sized {
     fn timeout(self, time: Duration) -> Timeout<Self>
