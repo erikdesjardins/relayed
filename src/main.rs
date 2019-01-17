@@ -14,9 +14,6 @@ mod server;
 mod stream;
 mod tcp;
 
-#[global_allocator]
-static ALLOC: std::alloc::System = std::alloc::System;
-
 fn main() -> Result<(), err::DebugFromDisplay<std::io::Error>> {
     use structopt::StructOpt;
 

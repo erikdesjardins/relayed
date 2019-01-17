@@ -51,7 +51,7 @@ pub fn run(public_addr: &SocketAddr, gateway_addr: &SocketAddr) -> Result<(), io
                     }
                     Async::Ready(None) => return Ok(None.into()),
                     Async::Ready(Some(())) => {
-                        return Ok(Some(active_connection.take().unwrap()).into())
+                        return Ok(Some(active_connection.take().unwrap()).into());
                     }
                 },
             };
