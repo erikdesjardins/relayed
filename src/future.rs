@@ -10,19 +10,6 @@ use crate::err;
 pub trait FutureExt: Future + Sized {
     fn timeout(self, time: Duration) -> Timeout<Self>
     where
-        Self::Error: From<io::Error>;
-
-    fn timeout_after_inactivity(self, time: Duration) -> TimeoutInactivity<Self>
-    where
-        Self::Error: From<io::Error>;
-}
-
-impl<T> FutureExt for T
-where
-    T: Future,
-{
-    fn timeout(self, time: Duration) -> Timeout<Self>
-    where
         Self::Error: From<io::Error>,
     {
         Timeout {
@@ -43,6 +30,8 @@ where
         }
     }
 }
+
+impl<T: Future> FutureExt for T {}
 
 pub struct Timeout<Fut> {
     fut: Fut,
