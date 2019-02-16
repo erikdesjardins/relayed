@@ -6,14 +6,13 @@ use std::time::Instant;
 
 use futures::sync::oneshot;
 use futures::try_ready;
-use log::{debug, info};
 use tokio::executor::current_thread::spawn;
 use tokio::net::TcpListener;
 use tokio::prelude::*;
 use tokio::runtime::current_thread::Runtime;
 use tokio::timer::Delay;
 
-use crate::config::{HANDSHAKE_TIMEOUT, QUEUE_TIMEOUT, TRANSFER_TIMEOUT};
+use crate::config::{HANDSHAKE_TIMEOUT, KEEPALIVE_TIMEOUT, QUEUE_TIMEOUT};
 use crate::err;
 use crate::future::FutureExt;
 use crate::heartbeat;
@@ -24,9 +23,9 @@ use crate::tcp;
 pub fn run(public_addr: &SocketAddr, gateway_addr: &SocketAddr) -> Result<(), io::Error> {
     let mut runtime = Runtime::new()?;
 
-    info!("Binding to public {}", public_addr);
+    log::info!("Binding to public {}", public_addr);
     let public_connections = TcpListener::bind(public_addr)?.incoming();
-    info!("Binding to gateway {}", gateway_addr);
+    log::info!("Binding to gateway {}", gateway_addr);
     let gateway_connections = TcpListener::bind(gateway_addr)?.incoming();
 
     // drop public connections which wait for too long,
@@ -46,7 +45,7 @@ pub fn run(public_addr: &SocketAddr, gateway_addr: &SocketAddr) -> Result<(), io
                 Some((_, ref mut delay)) => match requests.poll()? {
                     Async::NotReady => {
                         try_ready!(delay.poll());
-                        debug!("Connection expired at idle");
+                        log::debug!("Connection expired at idle");
                         None
                     }
                     Async::Ready(None) => return Ok(None.into()),
@@ -65,11 +64,11 @@ pub fn run(public_addr: &SocketAddr, gateway_addr: &SocketAddr) -> Result<(), io
                 .timeout(HANDSHAKE_TIMEOUT)
                 .then(|r| match r {
                     Ok(gateway) => {
-                        debug!("Early handshake succeeded");
+                        log::debug!("Early handshake succeeded");
                         Ok(Some(gateway))
                     }
                     Err(e) => {
-                        debug!("Early handshake failed: {}", e);
+                        log::debug!("Early handshake failed: {}", e);
                         Ok(None)
                     }
                 })
@@ -114,14 +113,14 @@ pub fn run(public_addr: &SocketAddr, gateway_addr: &SocketAddr) -> Result<(), io
                 Some((ref mut heartbeat, _)) => match heartbeat.poll() {
                     Ok(Async::NotReady) => return Ok(Async::NotReady),
                     Ok(Async::Ready(gateway)) => {
-                        debug!("Heartbeat completed");
+                        log::debug!("Heartbeat completed");
                         assert!(yield_requested);
                         yield_requested = false;
                         active_heartbeat = None;
                         return Ok(Some(gateway).into());
                     }
                     Err(e) => {
-                        debug!("Heartbeat failed: {}", e);
+                        log::debug!("Heartbeat failed: {}", e);
                         active_heartbeat = None;
                     }
                 },
@@ -136,11 +135,11 @@ pub fn run(public_addr: &SocketAddr, gateway_addr: &SocketAddr) -> Result<(), io
                 .timeout(HANDSHAKE_TIMEOUT)
                 .then(|r| match r {
                     Ok(gateway) => {
-                        debug!("Late handshake succeeded");
+                        log::debug!("Late handshake succeeded");
                         Ok(Some(gateway))
                     }
                     Err(e) => {
-                        debug!("Late handshake failed: {}", e);
+                        log::debug!("Late handshake failed: {}", e);
                         Ok(None)
                     }
                 })
@@ -152,22 +151,20 @@ pub fn run(public_addr: &SocketAddr, gateway_addr: &SocketAddr) -> Result<(), io
     let server = zip_left_then_right(public_connections, gateway_connections).for_each(
         move |((public, mut delay), gateway)| {
             if let Ok(Async::Ready(())) = delay.poll() {
-                debug!("Connection expired at conjoinment");
+                log::debug!("Connection expired at conjoinment");
                 return Ok(());
             }
-            info!("Spawning ({} active)", active.fetch_add(1, SeqCst) + 1);
+            public.set_keepalive(Some(KEEPALIVE_TIMEOUT))?;
+            gateway.set_keepalive(Some(KEEPALIVE_TIMEOUT))?;
+            log::info!("Spawning ({} active)", active.fetch_add(1, SeqCst) + 1);
             let active = active.clone();
-            Ok(spawn(
-                tcp::conjoin(public, gateway)
-                    .timeout_after_inactivity(TRANSFER_TIMEOUT)
-                    .then(move |r| {
-                        let active = active.fetch_sub(1, SeqCst) - 1;
-                        Ok(match r {
-                            Ok((down, up)) => info!("Closing ({} active): {}/{}", active, down, up),
-                            Err(e) => info!("Closing ({} active): {}", active, e),
-                        })
-                    }),
-            ))
+            Ok(spawn(tcp::conjoin(public, gateway).then(move |r| {
+                let active = active.fetch_sub(1, SeqCst) - 1;
+                Ok(match r {
+                    Ok((down, up)) => log::info!("Closing ({} active): {}/{}", active, down, up),
+                    Err(e) => log::info!("Closing ({} active): {}", active, e),
+                })
+            })))
         },
     );
 

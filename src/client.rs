@@ -5,7 +5,6 @@ use std::sync::atomic::{AtomicUsize, Ordering::*};
 use std::time::{Duration, Instant};
 
 use futures::future::Either;
-use log::{debug, error, info, warn};
 use tokio::executor::current_thread::spawn;
 use tokio::net::TcpStream;
 use tokio::prelude::*;
@@ -13,7 +12,7 @@ use tokio::runtime::current_thread::Runtime;
 use tokio::timer::Delay;
 
 use crate::backoff::Backoff;
-use crate::config::BACKOFF_SECS;
+use crate::config::{BACKOFF_SECS, KEEPALIVE_TIMEOUT};
 use crate::err;
 use crate::heartbeat;
 use crate::magic;
@@ -32,35 +31,37 @@ pub fn run(
 
     let client = stream::repeat(())
         .and_then(|()| {
-            debug!("Connecting to gateway");
+            log::debug!("Connecting to gateway");
             future::select_ok(gateway_addrs.iter().map(TcpStream::connect))
                 .map(|(gateway, _)| gateway)
         })
         .and_then(|gateway| {
-            debug!("Sending early handshake");
+            log::debug!("Sending early handshake");
             magic::write_to(gateway)
         })
         .and_then(|gateway| {
-            debug!("Waiting for end of heartbeat");
+            log::debug!("Waiting for end of heartbeat");
             heartbeat::read_from(gateway)
         })
         .and_then(|gateway| {
-            debug!("Sending late handshake");
+            log::debug!("Sending late handshake");
             magic::write_to(gateway)
         })
         .and_then(|gateway| {
-            debug!("Connecting to private");
+            log::debug!("Connecting to private");
             future::select_ok(private_addrs.iter().map(TcpStream::connect))
                 .map(move |(private, _)| (gateway, private))
         })
         .and_then(|(gateway, private)| {
-            info!("Spawning ({} active)", active.fetch_add(1, SeqCst) + 1);
+            gateway.set_keepalive(Some(KEEPALIVE_TIMEOUT))?;
+            private.set_keepalive(Some(KEEPALIVE_TIMEOUT))?;
+            log::info!("Spawning ({} active)", active.fetch_add(1, SeqCst) + 1);
             let active = active.clone();
             Ok(spawn(tcp::conjoin(gateway, private).then(move |r| {
                 let active = active.fetch_sub(1, SeqCst) - 1;
                 Ok(match r {
-                    Ok((down, up)) => info!("Closing ({} active): {}/{}", active, down, up),
-                    Err(e) => info!("Closing ({} active): {}", active, e),
+                    Ok((down, up)) => log::info!("Closing ({} active): {}/{}", active, down, up),
+                    Err(e) => log::info!("Closing ({} active): {}", active, e),
                 })
             })))
         })
@@ -70,9 +71,9 @@ pub fn run(
                 Either::A(future::ok(()))
             }
             Err(ref e) if retry => {
-                error!("{}", e);
+                log::error!("{}", e);
                 let seconds = backoff.get();
-                warn!("Retrying in {} seconds", seconds);
+                log::warn!("Retrying in {} seconds", seconds);
                 Either::B(
                     Delay::new(Instant::now() + Duration::from_secs(seconds as u64))
                         .map_err(err::to_io()),
