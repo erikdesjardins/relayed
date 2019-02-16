@@ -12,7 +12,7 @@ use tokio::runtime::current_thread::Runtime;
 use tokio::timer::Delay;
 
 use crate::backoff::Backoff;
-use crate::config::BACKOFF_SECS;
+use crate::config::{BACKOFF_SECS, KEEPALIVE_TIMEOUT};
 use crate::err;
 use crate::heartbeat;
 use crate::magic;
@@ -53,6 +53,8 @@ pub fn run(
                 .map(move |(private, _)| (gateway, private))
         })
         .and_then(|(gateway, private)| {
+            gateway.set_keepalive(Some(KEEPALIVE_TIMEOUT))?;
+            private.set_keepalive(Some(KEEPALIVE_TIMEOUT))?;
             log::info!("Spawning ({} active)", active.fetch_add(1, SeqCst) + 1);
             let active = active.clone();
             Ok(spawn(tcp::conjoin(gateway, private).then(move |r| {

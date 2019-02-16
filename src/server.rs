@@ -12,7 +12,7 @@ use tokio::prelude::*;
 use tokio::runtime::current_thread::Runtime;
 use tokio::timer::Delay;
 
-use crate::config::{HANDSHAKE_TIMEOUT, QUEUE_TIMEOUT, TRANSFER_TIMEOUT};
+use crate::config::{HANDSHAKE_TIMEOUT, KEEPALIVE_TIMEOUT, QUEUE_TIMEOUT};
 use crate::err;
 use crate::future::FutureExt;
 use crate::heartbeat;
@@ -154,19 +154,17 @@ pub fn run(public_addr: &SocketAddr, gateway_addr: &SocketAddr) -> Result<(), io
                 log::debug!("Connection expired at conjoinment");
                 return Ok(());
             }
+            public.set_keepalive(Some(KEEPALIVE_TIMEOUT))?;
+            gateway.set_keepalive(Some(KEEPALIVE_TIMEOUT))?;
             log::info!("Spawning ({} active)", active.fetch_add(1, SeqCst) + 1);
             let active = active.clone();
-            Ok(spawn(
-                tcp::conjoin(public, gateway)
-                    .timeout_after_inactivity(TRANSFER_TIMEOUT)
-                    .then(move |r| {
-                        let active = active.fetch_sub(1, SeqCst) - 1;
-                        Ok(match r {
-                            Ok((down, up)) => log::info!("Closing ({} active): {}/{}", active, down, up),
-                            Err(e) => log::info!("Closing ({} active): {}", active, e),
-                        })
-                    }),
-            ))
+            Ok(spawn(tcp::conjoin(public, gateway).then(move |r| {
+                let active = active.fetch_sub(1, SeqCst) - 1;
+                Ok(match r {
+                    Ok((down, up)) => log::info!("Closing ({} active): {}/{}", active, down, up),
+                    Err(e) => log::info!("Closing ({} active): {}", active, e),
+                })
+            })))
         },
     );
 
