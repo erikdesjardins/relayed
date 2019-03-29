@@ -49,8 +49,8 @@ pub fn run(public_addr: &SocketAddr, gateway_addr: &SocketAddr) -> Result<(), io
                         None
                     }
                     Async::Ready(None) => return Ok(None.into()),
-                    Async::Ready(Some(())) => {
-                        return Ok(Some(active_connection.take().unwrap()).into());
+                    Async::Ready(Some(token)) => {
+                        return Ok(Some((token, active_connection.take().unwrap())).into());
                     }
                 },
             };
@@ -79,15 +79,13 @@ pub fn run(public_addr: &SocketAddr, gateway_addr: &SocketAddr) -> Result<(), io
     // (and so the server doesn't accumulate a bunch of dead connections)
     let gateway_connections = spawn_idle(&runtime.handle(), |mut requests| {
         let mut gateway_connections = gateway_connections;
-        let mut yield_requested = false;
+        let mut current_request = None;
         let mut active_heartbeat = None;
         stream::poll_fn(move || loop {
-            if !yield_requested {
-                match requests.poll()? {
-                    Async::NotReady => {}
-                    Async::Ready(None) => return Ok(None.into()),
-                    Async::Ready(Some(())) => yield_requested = true,
-                }
+            match requests.poll()? {
+                Async::NotReady => {}
+                Async::Ready(None) => return Ok(None.into()),
+                Async::Ready(Some(token)) => current_request = Some(token),
             }
 
             match gateway_connections.poll()? {
@@ -102,22 +100,20 @@ pub fn run(public_addr: &SocketAddr, gateway_addr: &SocketAddr) -> Result<(), io
                 }
             }
 
-            match active_heartbeat {
-                None => return Ok(Async::NotReady),
-                Some((_, ref mut stop_heartbeat @ Some(_))) if yield_requested => {
+            match (&mut current_request, &mut active_heartbeat) {
+                (None, _) | (_, None) => return Ok(Async::NotReady),
+                (Some(_), Some((_, ref mut stop_heartbeat @ Some(_)))) => {
                     match stop_heartbeat.take().unwrap().send(()) {
                         Ok(()) => continue,
                         Err(()) => active_heartbeat = None,
                     }
                 }
-                Some((ref mut heartbeat, _)) => match heartbeat.poll() {
+                (ref mut token @ Some(_), Some((ref mut heartbeat, _))) => match heartbeat.poll() {
                     Ok(Async::NotReady) => return Ok(Async::NotReady),
                     Ok(Async::Ready(gateway)) => {
                         log::debug!("Heartbeat completed");
-                        assert!(yield_requested);
-                        yield_requested = false;
                         active_heartbeat = None;
-                        return Ok(Some(gateway).into());
+                        return Ok(Some((token.take().unwrap(), gateway)).into());
                     }
                     Err(e) => {
                         log::debug!("Heartbeat failed: {}", e);

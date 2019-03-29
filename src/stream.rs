@@ -24,11 +24,8 @@ pub fn zip_left_then_right<L, R, E>(
     })
 }
 
-/// Spawns a stream onto the provided `executor`.
-/// This inner stream can perform idle work and MUST return `Ok(NotReady)` or `Err(_)` until a request appears.
-/// Once a request appears, the inner stream MUST return exactly one `Ok(Ready(_))`,
-/// along with any number of `Ok(NotReady)` or `Err(_)`, before polling the request stream again.
-pub fn spawn_idle<T, E, S: Stream<Item = T, Error = E>>(
+/// Spawns a stream onto the provided `executor` to perform idle work.
+pub fn spawn_idle<T, E, S: Stream<Item = (RequestToken, T), Error = E>>(
     executor: &impl Executor<mpsc::Execute<S>>,
     f: impl FnOnce(Requests) -> S,
 ) -> impl Stream<Item = T, Error = E> {
@@ -47,8 +44,8 @@ pub fn spawn_idle<T, E, S: Stream<Item = T, Error = E>>(
         let mut state = State::SendingRequest;
         move || loop {
             match state {
-                State::SendingRequest => match request.start_send(())? {
-                    AsyncSink::NotReady(()) => return Ok(Async::NotReady),
+                State::SendingRequest => match request.start_send(RequestToken(()))? {
+                    AsyncSink::NotReady(_) => return Ok(Async::NotReady),
                     AsyncSink::Ready => state = State::FlushingRequest,
                 },
                 State::FlushingRequest => {
@@ -58,17 +55,20 @@ pub fn spawn_idle<T, E, S: Stream<Item = T, Error = E>>(
                 State::WaitingForResponse => {
                     let response = try_ready!(responses.poll());
                     state = State::SendingRequest;
-                    return Ok(response.into());
+                    return Ok(response.map(|(_, r)| r).into());
                 }
             };
         }
     })
 }
 
-pub struct Requests(mpsc::Receiver<()>);
+/// Unclonable token proving that a request was sent.
+pub struct RequestToken(());
+
+pub struct Requests(mpsc::Receiver<RequestToken>);
 
 impl Stream for Requests {
-    type Item = ();
+    type Item = RequestToken;
     type Error = Never;
 
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
