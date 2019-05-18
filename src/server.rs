@@ -45,7 +45,7 @@ pub fn run(public_addr: &SocketAddr, gateway_addr: &SocketAddr) -> Result<(), io
                 Some((_, ref mut delay)) => match requests.poll()? {
                     Async::NotReady => {
                         try_ready!(delay.poll());
-                        log::debug!("Connection expired at idle");
+                        log::info!("Connection expired at idle");
                         None
                     }
                     Async::Ready(None) => return Ok(None.into()),
@@ -64,11 +64,11 @@ pub fn run(public_addr: &SocketAddr, gateway_addr: &SocketAddr) -> Result<(), io
                 .timeout(HANDSHAKE_TIMEOUT)
                 .then(|r| match r {
                     Ok(gateway) => {
-                        log::debug!("Early handshake succeeded");
+                        log::info!("Early handshake succeeded");
                         Ok(Some(gateway))
                     }
                     Err(e) => {
-                        log::debug!("Early handshake failed: {}", e);
+                        log::info!("Early handshake failed: {}", e);
                         Ok(None)
                     }
                 })
@@ -111,12 +111,12 @@ pub fn run(public_addr: &SocketAddr, gateway_addr: &SocketAddr) -> Result<(), io
                 (ref mut token, Some((ref mut heartbeat, _))) => match heartbeat.poll() {
                     Ok(Async::NotReady) => return Ok(Async::NotReady),
                     Ok(Async::Ready(gateway)) => {
-                        log::debug!("Heartbeat completed");
+                        log::info!("Heartbeat completed");
                         active_heartbeat = None;
                         return Ok(Some((token.take().unwrap(), gateway)).into());
                     }
                     Err(e) => {
-                        log::debug!("Heartbeat failed: {}", e);
+                        log::info!("Heartbeat failed: {}", e);
                         active_heartbeat = None;
                     }
                 },
@@ -131,11 +131,11 @@ pub fn run(public_addr: &SocketAddr, gateway_addr: &SocketAddr) -> Result<(), io
                 .timeout(HANDSHAKE_TIMEOUT)
                 .then(|r| match r {
                     Ok(gateway) => {
-                        log::debug!("Late handshake succeeded");
+                        log::info!("Late handshake succeeded");
                         Ok(Some(gateway))
                     }
                     Err(e) => {
-                        log::debug!("Late handshake failed: {}", e);
+                        log::info!("Late handshake failed: {}", e);
                         Ok(None)
                     }
                 })
@@ -147,7 +147,7 @@ pub fn run(public_addr: &SocketAddr, gateway_addr: &SocketAddr) -> Result<(), io
     let server = zip_left_then_right(public_connections, gateway_connections).for_each(
         move |((public, mut delay), gateway)| {
             if let Ok(Async::Ready(())) = delay.poll() {
-                log::debug!("Connection expired at conjoinment");
+                log::info!("Connection expired at conjoinment");
                 return Ok(());
             }
             public.set_keepalive(Some(KEEPALIVE_TIMEOUT))?;

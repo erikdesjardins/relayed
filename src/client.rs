@@ -31,24 +31,24 @@ pub fn run(
 
     let client = stream::repeat(())
         .and_then(|()| {
-            log::debug!("Connecting to gateway");
+            log::info!("Connecting to gateway");
             future::select_ok(gateway_addrs.iter().map(TcpStream::connect))
                 .map(|(gateway, _)| gateway)
         })
         .and_then(|gateway| {
-            log::debug!("Sending early handshake");
+            log::info!("Sending early handshake");
             magic::write_to(gateway)
         })
         .and_then(|gateway| {
-            log::debug!("Waiting for end of heartbeat");
+            log::info!("Waiting for end of heartbeat");
             heartbeat::read_from(gateway)
         })
         .and_then(|gateway| {
-            log::debug!("Sending late handshake");
+            log::info!("Sending late handshake");
             magic::write_to(gateway)
         })
         .and_then(|gateway| {
-            log::debug!("Connecting to private");
+            log::info!("Connecting to private");
             future::select_ok(private_addrs.iter().map(TcpStream::connect))
                 .map(move |(private, _)| (gateway, private))
         })
