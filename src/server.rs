@@ -101,14 +101,14 @@ pub fn run(public_addr: &SocketAddr, gateway_addr: &SocketAddr) -> Result<(), io
             }
 
             match (&mut current_request, &mut active_heartbeat) {
-                (None, _) | (_, None) => return Ok(Async::NotReady),
+                (_, None) => return Ok(Async::NotReady),
                 (Some(_), Some((_, ref mut stop_heartbeat @ Some(_)))) => {
                     match stop_heartbeat.take().unwrap().send(()) {
                         Ok(()) => continue,
                         Err(()) => active_heartbeat = None,
                     }
                 }
-                (ref mut token @ Some(_), Some((ref mut heartbeat, _))) => match heartbeat.poll() {
+                (ref mut token, Some((ref mut heartbeat, _))) => match heartbeat.poll() {
                     Ok(Async::NotReady) => return Ok(Async::NotReady),
                     Ok(Async::Ready(gateway)) => {
                         log::debug!("Heartbeat completed");
