@@ -20,13 +20,13 @@ use crate::magic;
 use crate::stream::{spawn_idle, zip_left_then_right};
 use crate::tcp;
 
-pub fn run(public_addr: &SocketAddr, gateway_addr: &SocketAddr) -> Result<(), io::Error> {
+pub fn run(gateway_addr: &SocketAddr, public_addr: &SocketAddr) -> Result<(), io::Error> {
     let mut runtime = Runtime::new()?;
 
-    log::info!("Binding to public {}", public_addr);
-    let public_connections = TcpListener::bind(public_addr)?.incoming();
     log::info!("Binding to gateway {}", gateway_addr);
     let gateway_connections = TcpListener::bind(gateway_addr)?.incoming();
+    log::info!("Binding to public {}", public_addr);
+    let public_connections = TcpListener::bind(public_addr)?.incoming();
 
     // drop public connections which wait for too long,
     // to avoid unlimited queuing when no client is connected
