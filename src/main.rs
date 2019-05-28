@@ -29,15 +29,12 @@ fn main() -> Result<(), err::DebugFromDisplay<std::io::Error>> {
         .init();
 
     match mode {
-        opt::Mode::Server { gateway, public } => server::run(
-            &([0, 0, 0, 0], gateway).into(),
-            &([0, 0, 0, 0], public).into(),
-        )?,
+        opt::Mode::Server { gateway, public } => server::run(&gateway, &public)?,
         opt::Mode::Client {
             gateway,
             private,
             retry,
-        } => client::run(&gateway.0, &private.0, retry)?,
+        } => client::run(&gateway, &private, retry)?,
     }
 
     Ok(())
