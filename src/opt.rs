@@ -1,11 +1,8 @@
 use std::io;
 use std::net::{SocketAddr, ToSocketAddrs};
+use std::ops::Deref;
 
 use structopt::StructOpt;
-
-/// Trivial wrapper to avoid structopt special-casing `Vec`
-#[derive(Debug)]
-pub struct A<T>(pub T);
 
 #[derive(StructOpt, Debug)]
 pub struct Options {
@@ -48,6 +45,18 @@ pub enum Mode {
         #[structopt(short = "r", long = "retry")]
         retry: bool,
     },
+}
+
+/// Trivial wrapper to avoid structopt special-casing `Vec`
+#[derive(Debug)]
+pub struct A<T>(T);
+
+impl<T> Deref for A<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
 }
 
 fn socket_addrs(arg: &str) -> Result<A<Vec<SocketAddr>>, io::Error> {
