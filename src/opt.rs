@@ -1,6 +1,5 @@
 use std::io;
 use std::net::{SocketAddr, ToSocketAddrs};
-use std::ops::Deref;
 
 use structopt::StructOpt;
 
@@ -35,11 +34,11 @@ pub enum Mode {
     Client {
         /// Address of server's gateway
         #[structopt(parse(try_from_str = "socket_addrs"))]
-        gateway: A<Vec<SocketAddr>>,
+        gateway: V<SocketAddr>,
 
         /// Address to relay public traffic to
         #[structopt(parse(try_from_str = "socket_addrs"))]
-        private: A<Vec<SocketAddr>>,
+        private: V<SocketAddr>,
 
         /// Retry when connection fails (exponential backoff)
         #[structopt(short = "r", long = "retry")]
@@ -47,25 +46,16 @@ pub enum Mode {
     },
 }
 
-/// Trivial wrapper to avoid structopt special-casing `Vec`
-#[derive(Debug)]
-pub struct A<T>(T);
+/// Alias to avoid structopt special-casing `Vec`
+type V<T> = Vec<T>;
 
-impl<T> Deref for A<T> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-fn socket_addrs(arg: &str) -> Result<A<Vec<SocketAddr>>, io::Error> {
+fn socket_addrs(arg: &str) -> Result<Vec<SocketAddr>, io::Error> {
     let addrs = arg.to_socket_addrs()?.collect::<Vec<_>>();
     match addrs.len() {
         0 => Err(io::Error::new(
             io::ErrorKind::AddrNotAvailable,
             "Resolved to zero addresses",
         )),
-        _ => Ok(A(addrs)),
+        _ => Ok(addrs),
     }
 }
