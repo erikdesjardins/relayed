@@ -4,14 +4,10 @@ use std::net::{SocketAddr, ToSocketAddrs};
 use structopt::StructOpt;
 
 #[derive(StructOpt, Debug)]
+#[structopt(about)]
 pub struct Options {
     /// Logging verbosity (-v info, -vv debug, -vvv trace)
-    #[structopt(
-        short = "v",
-        long = "verbose",
-        parse(from_occurrences),
-        raw(global = "true")
-    )]
+    #[structopt(short = "v", long = "verbose", parse(from_occurrences), global = true)]
     pub verbose: u8,
 
     #[structopt(subcommand)]
@@ -33,11 +29,11 @@ pub enum Mode {
     #[structopt(name = "client")]
     Client {
         /// Address of server's gateway
-        #[structopt(parse(try_from_str = "socket_addrs"))]
+        #[structopt(parse(try_from_str = socket_addrs))]
         gateway: V<SocketAddr>,
 
         /// Address to relay public traffic to
-        #[structopt(parse(try_from_str = "socket_addrs"))]
+        #[structopt(parse(try_from_str = socket_addrs))]
         private: V<SocketAddr>,
 
         /// Retry when connection fails (exponential backoff)

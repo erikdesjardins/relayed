@@ -1,15 +1,15 @@
 [package]
 name = "relayed"
-version = "1.2.1"
+version = "1.2.2"
 authors = []
 description = "Relay a TCP socket to a machine behind a dynamic IP/firewall."
 edition = "2018"
 
 [dependencies]
-env_logger = { version = "0.6", default-features = false, features = ["humantime"] }
+env_logger = { version = "0.7", default-features = false, features = ["humantime"] }
 futures = "0.1"
 log = "0.4"
-structopt = { version = "0.2", default-features = false }
+structopt = { version = "0.3", default-features = false }
 tokio = "0.1"
 
 [profile.release]
