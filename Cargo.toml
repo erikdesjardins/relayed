@@ -1,6 +1,6 @@
 [package]
 name = "relayed"
-version = "1.2.0"
+version = "1.2.1"
 authors = []
 description = "Relay a TCP socket to a machine behind a dynamic IP/firewall."
 edition = "2018"
