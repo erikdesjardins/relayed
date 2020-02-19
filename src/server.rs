@@ -46,6 +46,14 @@ pub fn run(gateway_addr: &SocketAddr, public_addr: &SocketAddr) -> Result<(), io
                     Async::NotReady => {
                         try_ready!(delay.poll());
                         log::info!("Connection expired at idle");
+                        loop {
+                            // drop all remaining public connections
+                            match public_connections.poll()? {
+                                Async::Ready(Some(_)) => log::info!("Queued connection dropped"),
+                                Async::Ready(None) => return Ok(None.into()),
+                                Async::NotReady => break,
+                            }
+                        }
                         None
                     }
                     Async::Ready(None) => return Ok(None.into()),
