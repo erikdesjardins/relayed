@@ -160,6 +160,8 @@ pub fn run(gateway_addr: &SocketAddr, public_addr: &SocketAddr) -> Result<(), io
             }
             public.set_keepalive(Some(KEEPALIVE_TIMEOUT))?;
             gateway.set_keepalive(Some(KEEPALIVE_TIMEOUT))?;
+            public.set_nodelay(true)?;
+            gateway.set_nodelay(true)?;
             log::info!("Spawning ({} active)", active.fetch_add(1, SeqCst) + 1);
             let active = active.clone();
             Ok(spawn(tcp::conjoin(public, gateway).then(move |r| {

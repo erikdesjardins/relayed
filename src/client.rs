@@ -55,6 +55,8 @@ pub fn run(
         .and_then(|(gateway, private)| {
             gateway.set_keepalive(Some(KEEPALIVE_TIMEOUT))?;
             private.set_keepalive(Some(KEEPALIVE_TIMEOUT))?;
+            gateway.set_nodelay(true)?;
+            private.set_nodelay(true)?;
             log::info!("Spawning ({} active)", active.fetch_add(1, SeqCst) + 1);
             let active = active.clone();
             Ok(spawn(tcp::conjoin(gateway, private).then(move |r| {
