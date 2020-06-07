@@ -1,89 +1,78 @@
+use crate::backoff::Backoff;
+use crate::config::{CLIENT_BACKOFF_SECS, KEEPALIVE_TIMEOUT};
+use crate::future::select_ok;
+use crate::heartbeat;
+use crate::magic;
+use crate::rw::conjoin;
+use std::convert::Infallible;
 use std::io;
 use std::net::SocketAddr;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering::*};
-use std::time::{Duration, Instant};
-
-use futures::future::Either;
-use tokio::executor::current_thread::spawn;
+use std::time::Duration;
 use tokio::net::TcpStream;
-use tokio::prelude::*;
-use tokio::runtime::current_thread::Runtime;
-use tokio::timer::Delay;
+use tokio::task::LocalSet;
+use tokio::time::delay_for;
 
-use crate::backoff::Backoff;
-use crate::config::{BACKOFF_SECS, KEEPALIVE_TIMEOUT};
-use crate::err;
-use crate::heartbeat;
-use crate::magic;
-use crate::tcp;
+async fn connect(addrs: &[SocketAddr]) -> Result<TcpStream, io::Error> {
+    let stream = select_ok(addrs.iter().map(TcpStream::connect)).await?;
+    stream.set_nodelay(true)?;
+    stream.set_keepalive(Some(KEEPALIVE_TIMEOUT))?;
+    Ok(stream)
+}
 
-pub fn run(
+pub async fn run(
+    local: &LocalSet,
     gateway_addrs: &[SocketAddr],
     private_addrs: &[SocketAddr],
     retry: bool,
-) -> Result<(), io::Error> {
-    let mut runtime = Runtime::new()?;
-
-    let backoff = Backoff::new(BACKOFF_SECS);
-
+) -> Result<Infallible, io::Error> {
+    let mut backoff = Backoff::new(CLIENT_BACKOFF_SECS);
     let active = Rc::new(AtomicUsize::new(0));
 
-    let client = stream::repeat(())
-        .and_then(|()| {
+    loop {
+        let one_round = async {
             log::info!("Connecting to gateway");
-            future::select_ok(gateway_addrs.iter().map(TcpStream::connect))
-                .map(|(gateway, _)| gateway)
-        })
-        .and_then(|gateway| {
+            let mut gateway = connect(gateway_addrs).await?;
+
             log::info!("Sending early handshake");
-            magic::write_to(gateway)
-        })
-        .and_then(|gateway| {
+            magic::write_to(&mut gateway).await?;
+
             log::info!("Waiting for end of heartbeat");
-            heartbeat::read_from(gateway)
-        })
-        .and_then(|gateway| {
+            heartbeat::read_from(&mut gateway).await?;
+
             log::info!("Sending late handshake");
-            magic::write_to(gateway)
-        })
-        .and_then(|gateway| {
+            magic::write_to(&mut gateway).await?;
+
             log::info!("Connecting to private");
-            future::select_ok(private_addrs.iter().map(TcpStream::connect))
-                .map(move |(private, _)| (gateway, private))
-        })
-        .and_then(|(gateway, private)| {
-            gateway.set_keepalive(Some(KEEPALIVE_TIMEOUT))?;
-            private.set_keepalive(Some(KEEPALIVE_TIMEOUT))?;
-            gateway.set_nodelay(true)?;
-            private.set_nodelay(true)?;
+            let private = connect(private_addrs).await?;
+
             log::info!("Spawning ({} active)", active.fetch_add(1, SeqCst) + 1);
             let active = active.clone();
-            Ok(spawn(tcp::conjoin(gateway, private).then(move |r| {
+            local.spawn_local(async move {
+                let done = conjoin(gateway, private).await;
                 let active = active.fetch_sub(1, SeqCst) - 1;
-                Ok(match r {
+                match done {
                     Ok((down, up)) => log::info!("Closing ({} active): {}/{}", active, down, up),
                     Err(e) => log::info!("Closing ({} active): {}", active, e),
-                })
-            })))
-        })
-        .then(|r| match r {
+                }
+            });
+
+            Ok(())
+        }
+        .await;
+
+        match one_round {
             Ok(()) => {
                 backoff.reset();
-                Either::A(future::ok(()))
             }
-            Err(ref e) if retry => {
-                log::error!("{}", e);
-                let seconds = backoff.get();
+            Err(e) if retry => {
+                log::error!("Failed to establish connection: {}", e);
+                let seconds = backoff.next();
                 log::warn!("Retrying in {} seconds", seconds);
-                Either::B(
-                    Delay::new(Instant::now() + Duration::from_secs(seconds as u64))
-                        .map_err(err::to_io()),
-                )
+                delay_for(Duration::from_secs(u64::from(seconds))).await;
             }
-            Err(e) => Either::A(future::err(e)),
-        })
-        .for_each(Ok);
-
-    runtime.block_on(client)
+            Err(e) => return Err(e),
+        }
+    }
 }

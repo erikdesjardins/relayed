@@ -1,17 +1,19 @@
+use crate::config::HANDSHAKE_TIMEOUT;
 use std::io;
-
-use tokio::io::{read_exact, write_all};
-use tokio::prelude::*;
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use tokio::time::timeout;
 
 const MAGIC: [u8; 1] = [42];
 
-pub fn read_from<T: AsyncRead>(reader: T) -> impl Future<Item = T, Error = io::Error> {
-    read_exact(reader, [0; 1]).and_then(|(reader, buf)| match buf {
-        MAGIC => Ok(reader),
+pub async fn read_from(mut reader: impl AsyncRead + Unpin) -> Result<(), io::Error> {
+    let mut buf = [0; 1];
+    timeout(HANDSHAKE_TIMEOUT, reader.read_exact(&mut buf)).await??;
+    match buf {
+        MAGIC => Ok(()),
         _ => Err(io::ErrorKind::InvalidData.into()),
-    })
+    }
 }
 
-pub fn write_to<T: AsyncWrite>(writer: T) -> impl Future<Item = T, Error = io::Error> {
-    write_all(writer, MAGIC).map(|(writer, _)| writer)
+pub async fn write_to(mut writer: impl AsyncWrite + Unpin) -> Result<(), io::Error> {
+    writer.write_all(&MAGIC).await
 }

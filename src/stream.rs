@@ -1,65 +1,49 @@
-use futures::future::Executor;
-use futures::sync::mpsc;
-use futures::try_ready;
-use tokio::prelude::*;
+use futures::stream;
+use futures::{Stream, StreamExt};
+use pin_utils::pin_mut;
+use std::pin::Pin;
+use std::task::Context;
+use std::task::Poll;
+use tokio::sync::mpsc;
+use tokio::task::LocalSet;
 
-use crate::never::Never;
+/// Spawns a stream onto the local set to perform idle work.
+/// This keeps polling the inner stream even when no item is demanded by the parent,
+/// allowing it to keep making progress.
+pub fn spawn_idle<T, S>(local: &LocalSet, f: impl FnOnce(Requests) -> S) -> impl Stream<Item = T>
+where
+    T: 'static,
+    S: Stream<Item = (RequestToken, T)> + 'static,
+{
+    let (request, requests) = mpsc::channel(1);
+    let (mut response, responses) = mpsc::channel(1);
 
-pub fn zip_left_then_right<L, R, E>(
-    mut left: impl Stream<Item = L, Error = E>,
-    mut right: impl Stream<Item = R, Error = E>,
-) -> impl Stream<Item = (L, R), Error = E> {
-    let mut left_val = None;
-    stream::poll_fn(move || loop {
-        match left_val {
-            None => match try_ready!(left.poll()) {
-                None => return Ok(None.into()),
-                Some(l) => left_val = Some(l),
-            },
-            Some(_) => match try_ready!(right.poll()) {
-                None => return Ok(None.into()),
-                Some(r) => return Ok(Some((left_val.take().unwrap(), r)).into()),
-            },
-        }
-    })
-}
-
-/// Spawns a stream onto the provided `executor` to perform idle work.
-pub fn spawn_idle<T, E, S: Stream<Item = (RequestToken, T), Error = E>>(
-    executor: &impl Executor<mpsc::Execute<S>>,
-    f: impl FnOnce(Requests) -> S,
-) -> impl Stream<Item = T, Error = E> {
-    let (request, requests) = mpsc::channel(0);
-    let mut request = request.sink_map_err(|_| panic!("inner channel never shuts down"));
-    let requests = Requests(requests);
-
-    let mut responses = mpsc::spawn(f(requests), executor, 0);
-
-    stream::poll_fn({
-        enum State {
-            SendingRequest,
-            FlushingRequest,
-            WaitingForResponse,
-        }
-        let mut state = State::SendingRequest;
-        move || loop {
-            match state {
-                State::SendingRequest => match request.start_send(RequestToken(()))? {
-                    AsyncSink::NotReady(_) => return Ok(Async::NotReady),
-                    AsyncSink::Ready => state = State::FlushingRequest,
+    let idle = f(Requests(requests));
+    local.spawn_local(async move {
+        pin_mut!(idle);
+        loop {
+            match idle.next().await {
+                Some(resp) => match response.send(resp).await {
+                    Ok(()) => continue,
+                    Err(mpsc::error::SendError(_)) => return,
                 },
-                State::FlushingRequest => {
-                    try_ready!(request.poll_complete());
-                    state = State::WaitingForResponse;
-                }
-                State::WaitingForResponse => {
-                    let response = try_ready!(responses.poll());
-                    state = State::SendingRequest;
-                    return Ok(response.map(|(_, r)| r).into());
-                }
-            };
+                None => return,
+            }
         }
-    })
+    });
+
+    stream::unfold(
+        (request, responses, RequestToken(())),
+        |(mut request, mut responses, token)| async {
+            match request.send(token).await {
+                Ok(()) => match responses.recv().await {
+                    Some((token, val)) => Some((val, (request, responses, token))),
+                    None => None,
+                },
+                Err(mpsc::error::SendError(_)) => None,
+            }
+        },
+    )
 }
 
 /// Unclonable token proving that a request was sent.
@@ -69,11 +53,8 @@ pub struct Requests(mpsc::Receiver<RequestToken>);
 
 impl Stream for Requests {
     type Item = RequestToken;
-    type Error = Never;
 
-    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        self.0
-            .poll()
-            .map_err(|()| panic!("inner channel never shuts down"))
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        Stream::poll_next(Pin::new(&mut self.0), cx)
     }
 }

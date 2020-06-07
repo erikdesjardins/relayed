@@ -1,6 +1,5 @@
 use std::io;
 use std::net::{SocketAddr, ToSocketAddrs};
-
 use structopt::StructOpt;
 
 #[derive(StructOpt, Debug)]

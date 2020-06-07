@@ -8,4 +8,5 @@ pub const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(5);
 pub const HEARTBEAT_TIMEOUT: Duration = Duration::from_secs(10);
 pub const KEEPALIVE_TIMEOUT: Duration = Duration::from_secs(10);
 
-pub const BACKOFF_SECS: RangeInclusive<usize> = 1..=64;
+pub const SERVER_ACCEPT_BACKOFF_SECS: RangeInclusive<u8> = 1..=64;
+pub const CLIENT_BACKOFF_SECS: RangeInclusive<u8> = 1..=64;
