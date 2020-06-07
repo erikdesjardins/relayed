@@ -1,44 +1,18 @@
-use std::io;
-use std::time::{Duration, Instant};
+use std::future::Future;
 
-use futures::try_ready;
-use tokio::prelude::*;
-use tokio::timer::Delay;
-
-use crate::err;
-
-pub trait FutureExt: Future + Sized {
-    fn timeout(self, time: Duration) -> Timeout<Self>
-    where
-        Self::Error: From<io::Error>,
-    {
-        Timeout {
-            fut: self,
-            delay: Delay::new(Instant::now() + time),
+pub async fn select_ok<T, E, F>(iter: impl IntoIterator<Item = F>) -> Result<T, E>
+where
+    F: Future<Output = Result<T, E>>,
+{
+    let mut last_error = None;
+    for fut in iter {
+        match fut.await {
+            Ok(x) => return Ok(x),
+            Err(e) => last_error = Some(e),
         }
     }
-}
-
-impl<T: Future> FutureExt for T {}
-
-pub struct Timeout<Fut> {
-    fut: Fut,
-    delay: Delay,
-}
-
-impl<Fut> Future for Timeout<Fut>
-where
-    Fut: Future,
-    Fut::Error: From<io::Error>,
-{
-    type Item = Fut::Item;
-    type Error = Fut::Error;
-
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        if let Async::Ready(val) = self.fut.poll()? {
-            return Ok(val.into());
-        }
-        try_ready!(self.delay.poll().map_err(err::to_io()));
-        Err(Fut::Error::from(io::ErrorKind::TimedOut.into()))
+    match last_error {
+        Some(e) => Err(e),
+        None => panic!("select_ok: no elements"),
     }
 }

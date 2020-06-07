@@ -1,36 +1,27 @@
 use std::ops::RangeInclusive;
-use std::sync::atomic::{AtomicUsize, Ordering::*};
 
 pub struct Backoff {
-    value: AtomicUsize,
-    min: usize,
-    max: usize,
+    value: u8,
+    min: u8,
+    max: u8,
 }
 
 impl Backoff {
-    pub fn new(range: RangeInclusive<usize>) -> Self {
+    pub fn new(range: RangeInclusive<u8>) -> Self {
         Backoff {
-            value: (*range.start()).into(),
+            value: *range.start(),
             min: *range.start(),
             max: *range.end(),
         }
     }
 
-    pub fn get(&self) -> usize {
-        loop {
-            let old_value = self.value.load(Relaxed);
-            let new_value = old_value.saturating_mul(2).min(self.max);
-            match self
-                .value
-                .compare_exchange(old_value, new_value, SeqCst, Relaxed)
-            {
-                Ok(old_value) => return old_value,
-                Err(_) => continue,
-            }
-        }
+    pub fn next(&mut self) -> u8 {
+        let old_value = self.value;
+        self.value = old_value.saturating_mul(2).min(self.max);
+        old_value
     }
 
-    pub fn reset(&self) {
-        self.value.store(self.min, SeqCst);
+    pub fn reset(&mut self) {
+        self.value = self.min;
     }
 }

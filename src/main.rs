@@ -1,5 +1,3 @@
-#![allow(clippy::unit_arg)]
-
 mod backoff;
 mod client;
 mod config;
@@ -7,12 +5,10 @@ mod err;
 mod future;
 mod heartbeat;
 mod magic;
-mod never;
 mod opt;
 mod rw;
 mod server;
 mod stream;
-mod tcp;
 
 fn main() -> Result<(), err::DebugFromDisplay<std::io::Error>> {
     use structopt::StructOpt;
@@ -28,13 +24,23 @@ fn main() -> Result<(), err::DebugFromDisplay<std::io::Error>> {
         })
         .init();
 
+    let mut runtime = tokio::runtime::Builder::new()
+        .basic_scheduler()
+        .enable_all()
+        .build()?;
+    let local = tokio::task::LocalSet::new();
+
     match mode {
-        opt::Mode::Server { gateway, public } => server::run(&gateway, &public)?,
+        opt::Mode::Server { gateway, public } => {
+            runtime.block_on(local.run_until(server::run(&local, &gateway, &public)))?;
+        }
         opt::Mode::Client {
             gateway,
             private,
             retry,
-        } => client::run(&gateway, &private, retry)?,
+        } => {
+            runtime.block_on(local.run_until(client::run(&local, &gateway, &private, retry)))?;
+        }
     }
 
     Ok(())

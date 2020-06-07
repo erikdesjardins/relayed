@@ -1,178 +1,197 @@
+use crate::backoff::Backoff;
+use crate::config::{KEEPALIVE_TIMEOUT, QUEUE_TIMEOUT, SERVER_ACCEPT_BACKOFF_SECS};
+use crate::heartbeat;
+use crate::magic;
+use crate::rw::conjoin;
+use crate::stream::spawn_idle;
+use futures::future::{select, Either};
+use futures::stream;
+use futures::StreamExt;
+use pin_utils::pin_mut;
 use std::io;
 use std::net::SocketAddr;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering::*};
-use std::time::Instant;
+use std::time::Duration;
+use tokio::net::{TcpListener, TcpStream};
+use tokio::task::LocalSet;
+use tokio::time::{delay_for, timeout, Elapsed};
 
-use futures::sync::oneshot;
-use futures::try_ready;
-use tokio::executor::current_thread::spawn;
-use tokio::net::TcpListener;
-use tokio::prelude::*;
-use tokio::runtime::current_thread::Runtime;
-use tokio::timer::Delay;
-
-use crate::config::{HANDSHAKE_TIMEOUT, KEEPALIVE_TIMEOUT, QUEUE_TIMEOUT};
-use crate::err;
-use crate::future::FutureExt;
-use crate::heartbeat;
-use crate::magic;
-use crate::stream::{spawn_idle, zip_left_then_right};
-use crate::tcp;
-
-pub fn run(gateway_addr: &SocketAddr, public_addr: &SocketAddr) -> Result<(), io::Error> {
-    let mut runtime = Runtime::new()?;
-
-    log::info!("Binding to gateway {}", gateway_addr);
-    let gateway_connections = TcpListener::bind(gateway_addr)?.incoming();
-    log::info!("Binding to public {}", public_addr);
-    let public_connections = TcpListener::bind(public_addr)?.incoming();
-
-    // drop public connections which wait for too long,
-    // to avoid unlimited queuing when no client is connected
-    let public_connections = spawn_idle(&runtime.handle(), |mut requests| {
-        let mut public_connections = public_connections;
-        let mut active_connection = None;
-        stream::poll_fn(move || loop {
-            active_connection = match active_connection {
-                None => match try_ready!(public_connections.poll()) {
-                    None => return Ok(None.into()),
-                    Some(public) => Some((
-                        public,
-                        Delay::new(Instant::now() + QUEUE_TIMEOUT).map_err(err::to_io()),
-                    )),
-                },
-                Some((_, ref mut delay)) => match requests.poll()? {
-                    Async::NotReady => {
-                        try_ready!(delay.poll());
-                        log::info!("Connection expired at idle");
-                        loop {
-                            // drop all remaining public connections
-                            match public_connections.poll()? {
-                                Async::Ready(Some(_)) => log::info!("Queued connection dropped"),
-                                Async::Ready(None) => return Ok(None.into()),
-                                Async::NotReady => break,
-                            }
-                        }
-                        None
-                    }
-                    Async::Ready(None) => return Ok(None.into()),
-                    Async::Ready(Some(token)) => {
-                        return Ok(Some((token, active_connection.take().unwrap())).into());
-                    }
-                },
-            };
-        })
-    });
-
-    // early handshake: immediately kill unknown connections
-    let gateway_connections = gateway_connections
-        .and_then(|gateway| {
-            magic::read_from(gateway)
-                .timeout(HANDSHAKE_TIMEOUT)
-                .then(|r| match r {
-                    Ok(gateway) => {
-                        log::info!("Early handshake succeeded");
-                        Ok(Some(gateway))
-                    }
-                    Err(e) => {
-                        log::info!("Early handshake failed: {}", e);
-                        Ok(None)
-                    }
-                })
-        })
-        .filter_map(|x| x);
-
-    // heartbeat: so the client can tell if the connection drops
-    // (and so the server doesn't accumulate a bunch of dead connections)
-    let gateway_connections = spawn_idle(&runtime.handle(), |mut requests| {
-        let mut gateway_connections = gateway_connections;
-        let mut current_request = None;
-        let mut active_heartbeat = None;
-        stream::poll_fn(move || loop {
-            match requests.poll()? {
-                Async::NotReady => {}
-                Async::Ready(None) => return Ok(None.into()),
-                Async::Ready(Some(token)) => current_request = Some(token),
-            }
-
-            match gateway_connections.poll()? {
-                Async::NotReady => {}
-                Async::Ready(None) => return Ok(None.into()),
-                Async::Ready(Some(gateway)) => {
-                    let (stop_heartbeat, heartbeat_stopped) = oneshot::channel();
-                    active_heartbeat = Some((
-                        heartbeat::write_to(gateway, heartbeat_stopped.map_err(err::to_io())),
-                        Some(stop_heartbeat),
-                    ));
+async fn accept_conn(listener: &mut TcpListener) -> TcpStream {
+    let mut backoff = Backoff::new(SERVER_ACCEPT_BACKOFF_SECS);
+    loop {
+        match listener.accept().await {
+            Ok((stream, _addr)) => {
+                if let Err(e) = stream.set_nodelay(true) {
+                    log::warn!("Failed to set nodelay: {}", e);
+                    continue;
                 }
-            }
-
-            match (&mut current_request, &mut active_heartbeat) {
-                (_, None) => return Ok(Async::NotReady),
-                (Some(_), Some((_, ref mut stop_heartbeat @ Some(_)))) => {
-                    match stop_heartbeat.take().unwrap().send(()) {
-                        Ok(()) => continue,
-                        Err(()) => active_heartbeat = None,
-                    }
+                if let Err(e) = stream.set_keepalive(Some(KEEPALIVE_TIMEOUT)) {
+                    log::warn!("Failed to set keepalive: {}", e);
+                    continue;
                 }
-                (ref mut token, Some((ref mut heartbeat, _))) => match heartbeat.poll() {
-                    Ok(Async::NotReady) => return Ok(Async::NotReady),
-                    Ok(Async::Ready(gateway)) => {
-                        log::info!("Heartbeat completed");
-                        active_heartbeat = None;
-                        return Ok(Some((token.take().unwrap(), gateway)).into());
-                    }
-                    Err(e) => {
-                        log::info!("Heartbeat failed: {}", e);
-                        active_heartbeat = None;
-                    }
-                },
+                return stream;
             }
-        })
-    });
+            Err(e) => match e.kind() {
+                io::ErrorKind::ConnectionRefused
+                | io::ErrorKind::ConnectionAborted
+                | io::ErrorKind::ConnectionReset => {
+                    log::info!("Aborted connection dropped: {}", e);
+                }
+                _ => {
+                    log::error!("Error accepting connections: {}", e);
+                    let seconds = backoff.next();
+                    log::warn!("Retrying in {} seconds", seconds);
+                    delay_for(Duration::from_secs(u64::from(seconds))).await;
+                }
+            },
+        }
+    }
+}
 
-    // late handshake: ensure that client hasn't disappeared some time after early handshake
-    let gateway_connections = gateway_connections
-        .and_then(|gateway| {
-            magic::read_from(gateway)
-                .timeout(HANDSHAKE_TIMEOUT)
-                .then(|r| match r {
-                    Ok(gateway) => {
-                        log::info!("Late handshake succeeded");
-                        Ok(Some(gateway))
-                    }
-                    Err(e) => {
-                        log::info!("Late handshake failed: {}", e);
-                        Ok(None)
-                    }
-                })
-        })
-        .filter_map(|x| x);
-
+pub async fn run(
+    local: &LocalSet,
+    gateway_addr: &SocketAddr,
+    public_addr: &SocketAddr,
+) -> Result<(), io::Error> {
     let active = Rc::new(AtomicUsize::new(0));
 
-    let server = zip_left_then_right(public_connections, gateway_connections).for_each(
-        move |((public, mut delay), gateway)| {
-            if let Ok(Async::Ready(())) = delay.poll() {
-                log::info!("Connection expired at conjoinment");
-                return Ok(());
-            }
-            public.set_keepalive(Some(KEEPALIVE_TIMEOUT))?;
-            gateway.set_keepalive(Some(KEEPALIVE_TIMEOUT))?;
-            public.set_nodelay(true)?;
-            gateway.set_nodelay(true)?;
-            log::info!("Spawning ({} active)", active.fetch_add(1, SeqCst) + 1);
-            let active = active.clone();
-            Ok(spawn(tcp::conjoin(public, gateway).then(move |r| {
-                let active = active.fetch_sub(1, SeqCst) - 1;
-                Ok(match r {
-                    Ok((down, up)) => log::info!("Closing ({} active): {}/{}", active, down, up),
-                    Err(e) => log::info!("Closing ({} active): {}", active, e),
-                })
-            })))
-        },
-    );
+    log::info!("Binding to gateway: {}", gateway_addr);
+    let gateway_connections = TcpListener::bind(gateway_addr).await?;
+    log::info!("Binding to public: {}", public_addr);
+    let public_connections = TcpListener::bind(public_addr).await?;
 
-    runtime.block_on(server)
+    let public_connections = spawn_idle(local, |requests| {
+        stream::unfold(
+            (public_connections, requests),
+            |(mut public_connections, mut requests)| async {
+                loop {
+                    let public = accept_conn(&mut public_connections).await;
+
+                    // drop public connections which wait for too long,
+                    // to avoid unlimited queuing when no client is connected
+                    let (token, delay) = match select(requests.next(), delay_for(QUEUE_TIMEOUT))
+                        .await
+                    {
+                        Either::Left((Some(token), delay)) => (token, delay),
+                        Either::Left((None, _)) => return None,
+                        Either::Right(((), _)) => {
+                            log::info!("Connection expired at idle");
+                            loop {
+                                // timeout because we need to yield to receive the second queued conn
+                                // (listener.poll_recv() won't return Poll::Ready twice in a row,
+                                //  even if there are multiple queued connections)
+                                match timeout(Duration::from_millis(1), public_connections.accept())
+                                    .await
+                                {
+                                    Ok(Ok((_, _))) => log::info!("Queued conn dropped"),
+                                    Ok(Err(e)) => {
+                                        log::info!("Queued conn dropped with error: {}", e);
+                                        // stop in case this is a resource error, which could lead to a hot loop
+                                        break;
+                                    }
+                                    Err(e) => {
+                                        let _: Elapsed = e;
+                                        break;
+                                    }
+                                }
+                            }
+                            continue;
+                        }
+                    };
+
+                    return Some(((token, (public, delay)), (public_connections, requests)));
+                }
+            },
+        )
+    });
+
+    let gateway_connections = spawn_idle(local, |requests| {
+        stream::unfold(
+            (gateway_connections, requests),
+            |(mut gateway_connections, mut requests)| async {
+                loop {
+                    let mut gateway = accept_conn(&mut gateway_connections).await;
+
+                    // early handshake: immediately kill unknown connections
+                    match magic::read_from(&mut gateway).await {
+                        Ok(()) => log::info!("Early handshake succeeded"),
+                        Err(e) => {
+                            log::info!("Early handshake failed: {}", e);
+                            continue;
+                        }
+                    }
+
+                    // heartbeat: so the client can tell if the connection drops
+                    // (and so the server doesn't accumulate a bunch of dead connections)
+                    let token = {
+                        let heartbeat = heartbeat::write_forever(&mut gateway);
+                        pin_mut!(heartbeat);
+                        match select(requests.next(), heartbeat).await {
+                            Either::Left((Some(token), _)) => token,
+                            Either::Left((None, _)) => return None,
+                            Either::Right((Ok(i), _)) => match i {},
+                            Either::Right((Err(e), _)) => {
+                                log::info!("Heartbeat failed: {}", e);
+                                continue;
+                            }
+                        }
+                    };
+                    match heartbeat::write_final(&mut gateway).await {
+                        Ok(()) => log::info!("Heartbeat completed"),
+                        Err(e) => {
+                            log::info!("Heartbeat failed at finalization: {}", e);
+                            continue;
+                        }
+                    }
+
+                    return Some(((token, gateway), (gateway_connections, requests)));
+                }
+            },
+        )
+    });
+
+    pin_mut!(public_connections);
+    pin_mut!(gateway_connections);
+
+    loop {
+        let (public, delay) = match public_connections.next().await {
+            Some(x) => x,
+            None => return Ok(()),
+        };
+
+        let gateway = loop {
+            let mut gateway = match gateway_connections.next().await {
+                Some(gateway) => gateway,
+                None => return Ok(()),
+            };
+
+            // late handshake: ensure that client hasn't disappeared some time after early handshake
+            match magic::read_from(&mut gateway).await {
+                Ok(()) => log::info!("Late handshake succeeded"),
+                Err(e) => {
+                    log::info!("Late handshake failed: {}", e);
+                    continue;
+                }
+            }
+
+            break gateway;
+        };
+
+        if delay.is_elapsed() {
+            log::info!("Connection expired at conjoinment");
+            continue;
+        }
+
+        log::info!("Spawning ({} active)", active.fetch_add(1, SeqCst) + 1);
+        let active = active.clone();
+        local.spawn_local(async move {
+            let done = conjoin(public, gateway).await;
+            let active = active.fetch_sub(1, SeqCst) - 1;
+            match done {
+                Ok((down, up)) => log::info!("Closing ({} active): {}/{}", active, down, up),
+                Err(e) => log::info!("Closing ({} active): {}", active, e),
+            }
+        });
+    }
 }
