@@ -1,5 +1,6 @@
 use crate::backoff::Backoff;
 use crate::config::{KEEPALIVE_TIMEOUT, QUEUE_TIMEOUT, SERVER_ACCEPT_BACKOFF_SECS};
+use crate::err::{AppliesTo, IoErrorExt};
 use crate::heartbeat;
 use crate::magic;
 use crate::rw::conjoin;
@@ -17,11 +18,12 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio::task::LocalSet;
 use tokio::time::{delay_for, timeout, Elapsed};
 
-async fn accept_conn(listener: &mut TcpListener) -> TcpStream {
+async fn accept(listener: &mut TcpListener) -> TcpStream {
     let mut backoff = Backoff::new(SERVER_ACCEPT_BACKOFF_SECS);
     loop {
         match listener.accept().await {
             Ok((stream, _addr)) => {
+                backoff.reset();
                 if let Err(e) = stream.set_nodelay(true) {
                     log::warn!("Failed to set nodelay: {}", e);
                     continue;
@@ -32,19 +34,34 @@ async fn accept_conn(listener: &mut TcpListener) -> TcpStream {
                 }
                 return stream;
             }
-            Err(e) => match e.kind() {
-                io::ErrorKind::ConnectionRefused
-                | io::ErrorKind::ConnectionAborted
-                | io::ErrorKind::ConnectionReset => {
-                    log::info!("Aborted connection dropped: {}", e);
-                }
-                _ => {
+            Err(e) => match e.applies_to() {
+                AppliesTo::Connection => log::info!("Aborted connection dropped: {}", e),
+                AppliesTo::Listener => {
                     log::error!("Error accepting connections: {}", e);
                     let seconds = backoff.next();
                     log::warn!("Retrying in {} seconds", seconds);
                     delay_for(Duration::from_secs(u64::from(seconds))).await;
                 }
             },
+        }
+    }
+}
+
+async fn drain_queue(listener: &mut TcpListener) {
+    loop {
+        // timeout because we need to yield to receive the second queued conn
+        // (listener.poll_recv() won't return Poll::Ready twice in a row,
+        //  even if there are multiple queued connections)
+        match timeout(Duration::from_millis(1), listener.accept()).await {
+            Ok(Ok((_, _))) => log::info!("Queued conn dropped"),
+            Ok(Err(e)) => match e.applies_to() {
+                AppliesTo::Connection => log::info!("Queued conn dropped: {}", e),
+                AppliesTo::Listener => break,
+            },
+            Err(e) => {
+                let _: Elapsed = e;
+                break;
+            }
         }
     }
 }
@@ -59,59 +76,14 @@ pub async fn run(
     log::info!("Binding to gateway: {}", gateway_addr);
     let gateway_connections = TcpListener::bind(gateway_addr).await?;
     log::info!("Binding to public: {}", public_addr);
-    let public_connections = TcpListener::bind(public_addr).await?;
-
-    let public_connections = spawn_idle(local, |requests| {
-        stream::unfold(
-            (public_connections, requests),
-            |(mut public_connections, mut requests)| async {
-                loop {
-                    let public = accept_conn(&mut public_connections).await;
-
-                    // drop public connections which wait for too long,
-                    // to avoid unlimited queuing when no client is connected
-                    let (token, delay) = match select(requests.next(), delay_for(QUEUE_TIMEOUT))
-                        .await
-                    {
-                        Either::Left((Some(token), delay)) => (token, delay),
-                        Either::Left((None, _)) => return None,
-                        Either::Right(((), _)) => {
-                            log::info!("Connection expired at idle");
-                            loop {
-                                // timeout because we need to yield to receive the second queued conn
-                                // (listener.poll_recv() won't return Poll::Ready twice in a row,
-                                //  even if there are multiple queued connections)
-                                match timeout(Duration::from_millis(1), public_connections.accept())
-                                    .await
-                                {
-                                    Ok(Ok((_, _))) => log::info!("Queued conn dropped"),
-                                    Ok(Err(e)) => {
-                                        log::info!("Queued conn dropped with error: {}", e);
-                                        // stop in case this is a resource error, which could lead to a hot loop
-                                        break;
-                                    }
-                                    Err(e) => {
-                                        let _: Elapsed = e;
-                                        break;
-                                    }
-                                }
-                            }
-                            continue;
-                        }
-                    };
-
-                    return Some(((token, (public, delay)), (public_connections, requests)));
-                }
-            },
-        )
-    });
+    let mut public_connections = TcpListener::bind(public_addr).await?;
 
     let gateway_connections = spawn_idle(local, |requests| {
         stream::unfold(
             (gateway_connections, requests),
             |(mut gateway_connections, mut requests)| async {
                 loop {
-                    let mut gateway = accept_conn(&mut gateway_connections).await;
+                    let mut gateway = accept(&mut gateway_connections).await;
 
                     // early handshake: immediately kill unknown connections
                     match magic::read_from(&mut gateway).await {
@@ -123,7 +95,6 @@ pub async fn run(
                     }
 
                     // heartbeat: so the client can tell if the connection drops
-                    // (and so the server doesn't accumulate a bunch of dead connections)
                     let token = {
                         let heartbeat = heartbeat::write_forever(&mut gateway);
                         pin_mut!(heartbeat);
@@ -137,13 +108,6 @@ pub async fn run(
                             }
                         }
                     };
-                    match heartbeat::write_final(&mut gateway).await {
-                        Ok(()) => log::info!("Heartbeat completed"),
-                        Err(e) => {
-                            log::info!("Heartbeat failed at finalization: {}", e);
-                            continue;
-                        }
-                    }
 
                     return Some(((token, gateway), (gateway_connections, requests)));
                 }
@@ -151,20 +115,32 @@ pub async fn run(
         )
     });
 
-    pin_mut!(public_connections);
     pin_mut!(gateway_connections);
 
-    loop {
-        let (public, delay) = match public_connections.next().await {
-            Some(x) => x,
-            None => return Ok(()),
-        };
+    'public: loop {
+        let public = accept(&mut public_connections).await;
 
         let gateway = loop {
-            let mut gateway = match gateway_connections.next().await {
-                Some(gateway) => gateway,
-                None => return Ok(()),
+            // drop public connections which wait for too long, to avoid unlimited queuing when no gateway is connected
+            let mut gateway = match timeout(QUEUE_TIMEOUT, gateway_connections.next()).await {
+                Ok(Some(gateway)) => gateway,
+                Ok(None) => return Ok(()),
+                Err(e) => {
+                    let _: Elapsed = e;
+                    log::info!("Public connection expired waiting for gateway");
+                    drain_queue(&mut public_connections).await;
+                    continue 'public;
+                }
             };
+
+            // finish heartbeat: do this as late as possible so clients can't send late handshake and disconnect
+            match heartbeat::write_final(&mut gateway).await {
+                Ok(()) => log::info!("Heartbeat completed"),
+                Err(e) => {
+                    log::info!("Heartbeat failed at finalization: {}", e);
+                    continue;
+                }
+            }
 
             // late handshake: ensure that client hasn't disappeared some time after early handshake
             match magic::read_from(&mut gateway).await {
@@ -177,11 +153,6 @@ pub async fn run(
 
             break gateway;
         };
-
-        if delay.is_elapsed() {
-            log::info!("Connection expired at conjoinment");
-            continue;
-        }
 
         log::info!("Spawning ({} active)", active.fetch_add(1, SeqCst) + 1);
         let active = active.clone();
