@@ -95,7 +95,6 @@ pub async fn run(
                     }
 
                     // heartbeat: so the client can tell if the connection drops
-                    // (and so the server doesn't accumulate a bunch of dead connections)
                     let token = {
                         let heartbeat = heartbeat::write_forever(&mut gateway);
                         pin_mut!(heartbeat);
@@ -109,13 +108,6 @@ pub async fn run(
                             }
                         }
                     };
-                    match heartbeat::write_final(&mut gateway).await {
-                        Ok(()) => log::info!("Heartbeat completed"),
-                        Err(e) => {
-                            log::info!("Heartbeat failed at finalization: {}", e);
-                            continue;
-                        }
-                    }
 
                     return Some(((token, gateway), (gateway_connections, requests)));
                 }
@@ -140,6 +132,15 @@ pub async fn run(
                     continue 'public;
                 }
             };
+
+            // finish heartbeat: do this as late as possible so clients can't send late handshake and disconnect
+            match heartbeat::write_final(&mut gateway).await {
+                Ok(()) => log::info!("Heartbeat completed"),
+                Err(e) => {
+                    log::info!("Heartbeat failed at finalization: {}", e);
+                    continue;
+                }
+            }
 
             // late handshake: ensure that client hasn't disappeared some time after early handshake
             match magic::read_from(&mut gateway).await {
