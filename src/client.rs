@@ -45,14 +45,14 @@ pub async fn run(
             log::info!("Connecting to private");
             let private = connect(private_addrs).await?;
 
-            log::info!("Spawning ({} active)", active.fetch_add(1, SeqCst) + 1);
+            log::info!("Spawning ({})", active.fetch_add(1, SeqCst) + 1);
             let active = active.clone();
             local.spawn_local(async move {
                 let done = conjoin(gateway, private).await;
                 let active = active.fetch_sub(1, SeqCst) - 1;
                 match done {
-                    Ok((down, up)) => log::info!("Closing ({} active): {}/{}", active, down, up),
-                    Err(e) => log::info!("Closing ({} active): {}", active, e),
+                    Ok((down, up)) => log::info!("Closing ({}): {}/{}", active, down, up),
+                    Err(e) => log::info!("Closing ({}): {}", active, e),
                 }
             });
 

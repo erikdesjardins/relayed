@@ -18,21 +18,21 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio::task::LocalSet;
 use tokio::time::{delay_for, timeout, Elapsed};
 
-async fn accept(listener: &mut TcpListener) -> TcpStream {
+async fn accept(listener: &mut TcpListener) -> (TcpStream, SocketAddr) {
     let mut backoff = Backoff::new(SERVER_ACCEPT_BACKOFF_SECS);
     loop {
         match listener.accept().await {
-            Ok((stream, _addr)) => {
+            Ok((stream, addr)) => {
                 backoff.reset();
                 if let Err(e) = stream.set_nodelay(true) {
-                    log::warn!("Failed to set nodelay: {}", e);
+                    log::warn!("[{}] Failed to set nodelay: {}", addr, e);
                     continue;
                 }
                 if let Err(e) = stream.set_keepalive(Some(KEEPALIVE_TIMEOUT)) {
-                    log::warn!("Failed to set keepalive: {}", e);
+                    log::warn!("[{}] Failed to set keepalive: {}", addr, e);
                     continue;
                 }
-                return stream;
+                return (stream, addr);
             }
             Err(e) => match e.applies_to() {
                 AppliesTo::Connection => log::info!("Aborted connection dropped: {}", e),
@@ -53,7 +53,7 @@ async fn drain_queue(listener: &mut TcpListener) {
         // (listener.poll_recv() won't return Poll::Ready twice in a row,
         //  even if there are multiple queued connections)
         match timeout(Duration::from_millis(1), listener.accept()).await {
-            Ok(Ok((_, _))) => log::info!("Queued conn dropped"),
+            Ok(Ok((_, addr))) => log::info!("[{}] Queued conn dropped", addr),
             Ok(Err(e)) => match e.applies_to() {
                 AppliesTo::Connection => log::info!("Queued conn dropped: {}", e),
                 AppliesTo::Listener => break,
@@ -83,13 +83,13 @@ pub async fn run(
             (gateway_connections, requests),
             |(mut gateway_connections, mut requests)| async {
                 loop {
-                    let mut gateway = accept(&mut gateway_connections).await;
+                    let (mut gateway, addr) = accept(&mut gateway_connections).await;
 
                     // early handshake: immediately kill unknown connections
                     match magic::read_from(&mut gateway).await {
-                        Ok(()) => log::info!("Early handshake succeeded"),
+                        Ok(()) => log::info!("[{}] Early handshake succeeded", addr),
                         Err(e) => {
-                            log::info!("Early handshake failed: {}", e);
+                            log::info!("[{}] Early handshake failed: {}", addr, e);
                             continue;
                         }
                     }
@@ -103,13 +103,13 @@ pub async fn run(
                             Either::Left((None, _)) => return None,
                             Either::Right((Ok(i), _)) => match i {},
                             Either::Right((Err(e), _)) => {
-                                log::info!("Heartbeat failed: {}", e);
+                                log::info!("[{}] Heartbeat failed: {}", addr, e);
                                 continue;
                             }
                         }
                     };
 
-                    return Some(((token, gateway), (gateway_connections, requests)));
+                    return Some(((token, (gateway, addr)), (gateway_connections, requests)));
                 }
             },
         )
@@ -118,16 +118,17 @@ pub async fn run(
     pin_mut!(gateway_connections);
 
     'public: loop {
-        let public = accept(&mut public_connections).await;
+        let (public, addr) = accept(&mut public_connections).await;
 
         let gateway = loop {
             // drop public connections which wait for too long, to avoid unlimited queuing when no gateway is connected
-            let mut gateway = match timeout(QUEUE_TIMEOUT, gateway_connections.next()).await {
+            let (mut gateway, addr) = match timeout(QUEUE_TIMEOUT, gateway_connections.next()).await
+            {
                 Ok(Some(gateway)) => gateway,
                 Ok(None) => return Ok(()),
                 Err(e) => {
                     let _: Elapsed = e;
-                    log::info!("Public connection expired waiting for gateway");
+                    log::info!("[{}] Expired waiting for gateway", addr);
                     drain_queue(&mut public_connections).await;
                     continue 'public;
                 }
@@ -135,18 +136,18 @@ pub async fn run(
 
             // finish heartbeat: do this as late as possible so clients can't send late handshake and disconnect
             match heartbeat::write_final(&mut gateway).await {
-                Ok(()) => log::info!("Heartbeat completed"),
+                Ok(()) => log::info!("[{}] Heartbeat completed", addr),
                 Err(e) => {
-                    log::info!("Heartbeat failed at finalization: {}", e);
+                    log::info!("[{}] Heartbeat failed at finalization: {}", addr, e);
                     continue;
                 }
             }
 
             // late handshake: ensure that client hasn't disappeared some time after early handshake
             match magic::read_from(&mut gateway).await {
-                Ok(()) => log::info!("Late handshake succeeded"),
+                Ok(()) => log::info!("[{}] Late handshake succeeded", addr),
                 Err(e) => {
-                    log::info!("Late handshake failed: {}", e);
+                    log::info!("[{}] Late handshake failed: {}", addr, e);
                     continue;
                 }
             }
@@ -154,14 +155,14 @@ pub async fn run(
             break gateway;
         };
 
-        log::info!("Spawning ({} active)", active.fetch_add(1, SeqCst) + 1);
+        log::info!("[{}] Spawning ({})", addr, active.fetch_add(1, SeqCst) + 1);
         let active = active.clone();
         local.spawn_local(async move {
             let done = conjoin(public, gateway).await;
             let active = active.fetch_sub(1, SeqCst) - 1;
             match done {
-                Ok((down, up)) => log::info!("Closing ({} active): {}/{}", active, down, up),
-                Err(e) => log::info!("Closing ({} active): {}", active, e),
+                Ok((down, up)) => log::info!("[{}] Closing ({}): {}/{}", addr, active, down, up),
+                Err(e) => log::info!("[{}] Closing ({}): {}", addr, active, e),
             }
         });
     }
