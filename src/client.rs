@@ -4,7 +4,6 @@ use crate::future::select_ok;
 use crate::heartbeat;
 use crate::magic;
 use crate::rw::conjoin;
-use std::convert::Infallible;
 use std::io;
 use std::net::SocketAddr;
 use std::rc::Rc;
@@ -25,8 +24,7 @@ pub async fn run(
     local: &LocalSet,
     gateway_addrs: &[SocketAddr],
     private_addrs: &[SocketAddr],
-    retry: bool,
-) -> Result<Infallible, io::Error> {
+) -> ! {
     let mut backoff = Backoff::new(CLIENT_BACKOFF_SECS);
     let active = Rc::new(AtomicUsize::new(0));
 
@@ -58,7 +56,7 @@ pub async fn run(
                 }
             });
 
-            Ok(())
+            Ok::<(), io::Error>(())
         }
         .await;
 
@@ -66,13 +64,12 @@ pub async fn run(
             Ok(()) => {
                 backoff.reset();
             }
-            Err(e) if retry => {
-                log::error!("Failed to establish connection: {}", e);
+            Err(e) => {
+                log::error!("Failed: {}", e);
                 let seconds = backoff.next();
                 log::warn!("Retrying in {} seconds", seconds);
                 delay_for(Duration::from_secs(u64::from(seconds))).await;
             }
-            Err(e) => return Err(e),
         }
     }
 }

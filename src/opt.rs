@@ -34,10 +34,6 @@ pub enum Mode {
         /// Address to relay public traffic to
         #[structopt(parse(try_from_str = socket_addrs))]
         private: V<SocketAddr>,
-
-        /// Retry when connection fails (exponential backoff)
-        #[structopt(short = "r", long = "retry")]
-        retry: bool,
     },
 }
 
