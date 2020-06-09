@@ -34,12 +34,8 @@ fn main() -> Result<(), err::DebugFromDisplay<std::io::Error>> {
         opt::Mode::Server { gateway, public } => {
             runtime.block_on(local.run_until(server::run(&local, &gateway, &public)))?;
         }
-        opt::Mode::Client {
-            gateway,
-            private,
-            retry,
-        } => {
-            runtime.block_on(local.run_until(client::run(&local, &gateway, &private, retry)))?;
+        opt::Mode::Client { gateway, private } => {
+            runtime.block_on(local.run_until(client::run(&local, &gateway, &private)));
         }
     }
 
