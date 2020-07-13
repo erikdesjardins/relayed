@@ -1,7 +1,8 @@
 use std::ops::RangeInclusive;
 use std::time::Duration;
 
-pub const BUFFER_SIZE: usize = 4096;
+pub const MIN_BUFFER_SIZE: usize = 4 * 1024;
+pub const MAX_BUFFER_SIZE: usize = 2 * 1024 * 1024;
 
 pub const QUEUE_TIMEOUT: Duration = Duration::from_secs(60);
 pub const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(5);
