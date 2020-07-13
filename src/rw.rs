@@ -1,4 +1,4 @@
-use crate::config::BUFFER_SIZE;
+use crate::config::{MAX_BUFFER_SIZE, MIN_BUFFER_SIZE};
 use futures::future;
 use futures::ready;
 use std::future::Future;
@@ -27,7 +27,7 @@ struct Buf {
     pos: usize,
     cap: usize,
     amt: u64,
-    buf: [u8; BUFFER_SIZE],
+    buf: Vec<u8>,
 }
 
 enum BufState {
@@ -43,7 +43,7 @@ impl Buf {
             pos: 0,
             cap: 0,
             amt: 0,
-            buf: [0; BUFFER_SIZE],
+            buf: vec![0; MIN_BUFFER_SIZE],
         }
     }
 
@@ -75,6 +75,11 @@ impl Buf {
                         } else {
                             self.pos += i;
                             self.amt += i as u64;
+                            // if we read and write the full buffer at once, double it
+                            if i == self.buf.len() && self.buf.len() < MAX_BUFFER_SIZE {
+                                let double_len = self.buf.len() * 2;
+                                self.buf.resize(double_len, 0);
+                            }
                         }
                     }
                 }
