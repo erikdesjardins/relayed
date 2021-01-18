@@ -11,9 +11,7 @@ mod server;
 mod stream;
 
 fn main() -> Result<(), err::DebugFromDisplay<std::io::Error>> {
-    use structopt::StructOpt;
-
-    let opt::Options { verbose, mode } = opt::Options::from_args();
+    let opt::Options { verbose, mode } = structopt::StructOpt::from_args();
 
     env_logger::Builder::new()
         .filter_level(match verbose {
