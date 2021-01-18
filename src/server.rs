@@ -154,11 +154,11 @@ pub async fn run(
             break gateway;
         };
 
-        log::info!("Spawning ({} active)", active.fetch_add(1, SeqCst) + 1);
+        log::info!("Spawning ({} active)", active.fetch_add(1, Relaxed) + 1);
         let active = active.clone();
         local.spawn_local(async move {
             let done = conjoin(public, gateway).await;
-            let active = active.fetch_sub(1, SeqCst) - 1;
+            let active = active.fetch_sub(1, Relaxed) - 1;
             match done {
                 Ok((down, up)) => log::info!("Closing ({} active): {}/{}", active, down, up),
                 Err(e) => log::info!("Closing ({} active): {}", active, e),
