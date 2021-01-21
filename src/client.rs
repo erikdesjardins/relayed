@@ -1,5 +1,5 @@
 use crate::backoff::Backoff;
-use crate::config::{CLIENT_BACKOFF_SECS, KEEPALIVE_TIMEOUT};
+use crate::config::CLIENT_BACKOFF_SECS;
 use crate::future::select_ok;
 use crate::heartbeat;
 use crate::magic;
@@ -11,12 +11,11 @@ use std::sync::atomic::{AtomicUsize, Ordering::*};
 use std::time::Duration;
 use tokio::net::TcpStream;
 use tokio::task::LocalSet;
-use tokio::time::delay_for;
+use tokio::time::sleep;
 
 async fn connect(addrs: &[SocketAddr]) -> Result<TcpStream, io::Error> {
     let stream = select_ok(addrs.iter().map(TcpStream::connect)).await?;
     stream.set_nodelay(true)?;
-    stream.set_keepalive(Some(KEEPALIVE_TIMEOUT))?;
     Ok(stream)
 }
 
@@ -45,11 +44,11 @@ pub async fn run(
             log::info!("Connecting to private");
             let private = connect(private_addrs).await?;
 
-            log::info!("Spawning ({} active)", active.fetch_add(1, SeqCst) + 1);
+            log::info!("Spawning ({} active)", active.fetch_add(1, Relaxed) + 1);
             let active = active.clone();
             local.spawn_local(async move {
                 let done = conjoin(gateway, private).await;
-                let active = active.fetch_sub(1, SeqCst) - 1;
+                let active = active.fetch_sub(1, Relaxed) - 1;
                 match done {
                     Ok((down, up)) => log::info!("Closing ({} active): {}/{}", active, down, up),
                     Err(e) => log::info!("Closing ({} active): {}", active, e),
@@ -68,7 +67,7 @@ pub async fn run(
                 log::error!("Failed: {}", e);
                 let seconds = backoff.next();
                 log::warn!("Retrying in {} seconds", seconds);
-                delay_for(Duration::from_secs(u64::from(seconds))).await;
+                sleep(Duration::from_secs(u64::from(seconds))).await;
             }
         }
     }

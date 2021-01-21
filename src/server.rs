@@ -1,5 +1,5 @@
 use crate::backoff::Backoff;
-use crate::config::{KEEPALIVE_TIMEOUT, QUEUE_TIMEOUT, SERVER_ACCEPT_BACKOFF_SECS};
+use crate::config::{QUEUE_TIMEOUT, SERVER_ACCEPT_BACKOFF_SECS};
 use crate::err::{AppliesTo, IoErrorExt};
 use crate::heartbeat;
 use crate::magic;
@@ -16,7 +16,8 @@ use std::sync::atomic::{AtomicUsize, Ordering::*};
 use std::time::Duration;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::task::LocalSet;
-use tokio::time::{delay_for, timeout, Elapsed};
+use tokio::time::error::Elapsed;
+use tokio::time::{sleep, timeout};
 
 async fn accept(listener: &mut TcpListener) -> TcpStream {
     let mut backoff = Backoff::new(SERVER_ACCEPT_BACKOFF_SECS);
@@ -28,10 +29,6 @@ async fn accept(listener: &mut TcpListener) -> TcpStream {
                     log::warn!("Failed to set nodelay: {}", e);
                     continue;
                 }
-                if let Err(e) = stream.set_keepalive(Some(KEEPALIVE_TIMEOUT)) {
-                    log::warn!("Failed to set keepalive: {}", e);
-                    continue;
-                }
                 return stream;
             }
             Err(e) => match e.applies_to() {
@@ -40,7 +37,7 @@ async fn accept(listener: &mut TcpListener) -> TcpStream {
                     log::error!("Error accepting connections: {}", e);
                     let seconds = backoff.next();
                     log::warn!("Retrying in {} seconds", seconds);
-                    delay_for(Duration::from_secs(u64::from(seconds))).await;
+                    sleep(Duration::from_secs(u64::from(seconds))).await;
                 }
             },
         }
@@ -154,11 +151,11 @@ pub async fn run(
             break gateway;
         };
 
-        log::info!("Spawning ({} active)", active.fetch_add(1, SeqCst) + 1);
+        log::info!("Spawning ({} active)", active.fetch_add(1, Relaxed) + 1);
         let active = active.clone();
         local.spawn_local(async move {
             let done = conjoin(public, gateway).await;
-            let active = active.fetch_sub(1, SeqCst) - 1;
+            let active = active.fetch_sub(1, Relaxed) - 1;
             match done {
                 Ok((down, up)) => log::info!("Closing ({} active): {}/{}", active, down, up),
                 Err(e) => log::info!("Closing ({} active): {}", active, e),
