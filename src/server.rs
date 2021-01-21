@@ -1,5 +1,5 @@
 use crate::backoff::Backoff;
-use crate::config::{KEEPALIVE_TIMEOUT, QUEUE_TIMEOUT, SERVER_ACCEPT_BACKOFF_SECS};
+use crate::config::{QUEUE_TIMEOUT, SERVER_ACCEPT_BACKOFF_SECS};
 use crate::err::{AppliesTo, IoErrorExt};
 use crate::heartbeat;
 use crate::magic;
@@ -26,10 +26,6 @@ async fn accept(listener: &mut TcpListener) -> TcpStream {
                 backoff.reset();
                 if let Err(e) = stream.set_nodelay(true) {
                     log::warn!("Failed to set nodelay: {}", e);
-                    continue;
-                }
-                if let Err(e) = stream.set_keepalive(Some(KEEPALIVE_TIMEOUT)) {
-                    log::warn!("Failed to set keepalive: {}", e);
                     continue;
                 }
                 return stream;

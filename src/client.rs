@@ -1,5 +1,5 @@
 use crate::backoff::Backoff;
-use crate::config::{CLIENT_BACKOFF_SECS, KEEPALIVE_TIMEOUT};
+use crate::config::CLIENT_BACKOFF_SECS;
 use crate::future::select_ok;
 use crate::heartbeat;
 use crate::magic;
@@ -16,7 +16,6 @@ use tokio::time::delay_for;
 async fn connect(addrs: &[SocketAddr]) -> Result<TcpStream, io::Error> {
     let stream = select_ok(addrs.iter().map(TcpStream::connect)).await?;
     stream.set_nodelay(true)?;
-    stream.set_keepalive(Some(KEEPALIVE_TIMEOUT))?;
     Ok(stream)
 }
 
