@@ -5,7 +5,7 @@ use std::future::Future;
 use std::io;
 use std::pin::Pin;
 use std::task::{Context, Poll};
-use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
 pub fn conjoin(
     mut a: impl AsyncRead + AsyncWrite + Unpin,
@@ -57,12 +57,13 @@ impl Buf {
             match self.state {
                 BufState::ReadWrite => {
                     if self.pos == self.cap {
-                        let n = ready!(Pin::new(&mut *reader).poll_read(cx, &mut self.buf)?);
-                        if n == 0 {
+                        let mut buf = ReadBuf::new(&mut self.buf);
+                        ready!(Pin::new(&mut *reader).poll_read(cx, &mut buf))?;
+                        if buf.filled().is_empty() {
                             self.state = BufState::Shutdown;
                         } else {
                             self.pos = 0;
-                            self.cap = n;
+                            self.cap = buf.filled().len();
                         }
                     }
 

@@ -16,7 +16,8 @@ use std::sync::atomic::{AtomicUsize, Ordering::*};
 use std::time::Duration;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::task::LocalSet;
-use tokio::time::{delay_for, timeout, Elapsed};
+use tokio::time::error::Elapsed;
+use tokio::time::{sleep, timeout};
 
 async fn accept(listener: &mut TcpListener) -> TcpStream {
     let mut backoff = Backoff::new(SERVER_ACCEPT_BACKOFF_SECS);
@@ -36,7 +37,7 @@ async fn accept(listener: &mut TcpListener) -> TcpStream {
                     log::error!("Error accepting connections: {}", e);
                     let seconds = backoff.next();
                     log::warn!("Retrying in {} seconds", seconds);
-                    delay_for(Duration::from_secs(u64::from(seconds))).await;
+                    sleep(Duration::from_secs(u64::from(seconds))).await;
                 }
             },
         }

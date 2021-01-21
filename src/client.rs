@@ -11,7 +11,7 @@ use std::sync::atomic::{AtomicUsize, Ordering::*};
 use std::time::Duration;
 use tokio::net::TcpStream;
 use tokio::task::LocalSet;
-use tokio::time::delay_for;
+use tokio::time::sleep;
 
 async fn connect(addrs: &[SocketAddr]) -> Result<TcpStream, io::Error> {
     let stream = select_ok(addrs.iter().map(TcpStream::connect)).await?;
@@ -67,7 +67,7 @@ pub async fn run(
                 log::error!("Failed: {}", e);
                 let seconds = backoff.next();
                 log::warn!("Retrying in {} seconds", seconds);
-                delay_for(Duration::from_secs(u64::from(seconds))).await;
+                sleep(Duration::from_secs(u64::from(seconds))).await;
             }
         }
     }

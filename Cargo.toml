@@ -6,12 +6,12 @@ description = "Relay a TCP socket to a machine behind a dynamic IP/firewall."
 edition = "2018"
 
 [dependencies]
-env_logger = { version = "0.7", default-features = false, features = ["humantime"] }
+env_logger = { version = "0.8", default-features = false, features = ["humantime"] }
 futures = "0.3"
 log = "0.4"
 pin-utils = "0.1"
 structopt = { version = "0.3", default-features = false }
-tokio = { version = "0.2" , features = ["io-util", "rt-core", "rt-util", "stream", "sync", "tcp", "time"] }
+tokio = { version = "1.0", features = ["io-util", "macros", "net", "rt", "sync", "time"] }
 
 [profile.release]
 panic = "abort"

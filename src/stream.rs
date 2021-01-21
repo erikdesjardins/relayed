@@ -17,7 +17,7 @@ where
     S: Stream<Item = (RequestToken, T)> + 'static,
 {
     let (request, requests) = mpsc::channel(1);
-    let (mut response, responses) = mpsc::channel(1);
+    let (response, responses) = mpsc::channel(1);
 
     let idle = f(Requests(requests));
     local.spawn_local(async move {
@@ -35,7 +35,7 @@ where
 
     stream::unfold(
         (request, responses, ManuallyDrop::new(RequestToken(()))),
-        |(mut request, mut responses, token)| async {
+        |(request, mut responses, token)| async {
             match request.send(token).await {
                 Ok(()) => match responses.recv().await {
                     Some((token, val)) => Some((val, (request, responses, token))),
@@ -61,6 +61,8 @@ impl Stream for Requests {
     type Item = RequestToken;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        Stream::poll_next(Pin::new(&mut self.0), cx).map(|p| p.map(ManuallyDrop::into_inner))
+        self.0
+            .poll_recv(cx)
+            .map(|p| p.map(ManuallyDrop::into_inner))
     }
 }

@@ -10,7 +10,8 @@ mod rw;
 mod server;
 mod stream;
 
-fn main() -> Result<(), err::DebugFromDisplay<std::io::Error>> {
+#[tokio::main(flavor = "current_thread")]
+async fn main() -> Result<(), err::DebugFromDisplay<std::io::Error>> {
     let opt::Options { verbose, mode } = structopt::StructOpt::from_args();
 
     env_logger::Builder::new()
@@ -22,18 +23,18 @@ fn main() -> Result<(), err::DebugFromDisplay<std::io::Error>> {
         })
         .init();
 
-    let mut runtime = tokio::runtime::Builder::new()
-        .basic_scheduler()
-        .enable_all()
-        .build()?;
     let local = tokio::task::LocalSet::new();
 
     match mode {
         opt::Mode::Server { gateway, public } => {
-            runtime.block_on(local.run_until(server::run(&local, &gateway, &public)))?;
+            local
+                .run_until(server::run(&local, &gateway, &public))
+                .await?;
         }
         opt::Mode::Client { gateway, private } => {
-            runtime.block_on(local.run_until(client::run(&local, &gateway, &private)));
+            local
+                .run_until(client::run(&local, &gateway, &private))
+                .await;
         }
     }
 
