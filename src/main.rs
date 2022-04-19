@@ -1,3 +1,5 @@
+#![allow(clippy::manual_map)]
+
 mod backoff;
 mod client;
 mod config;
