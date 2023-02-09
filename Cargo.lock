@@ -336,7 +336,7 @@ dependencies = [
 
 [[package]]
 name = "relayed"
-version = "1.2.11"
+version = "1.2.12"
 dependencies = [
  "clap",
  "env_logger",
