@@ -14,7 +14,7 @@ mod stream;
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), err::DebugFromDisplay<std::io::Error>> {
-    let opt::Options { verbose, mode } = structopt::StructOpt::from_args();
+    let opt::Options { verbose, mode } = clap::Parser::parse();
 
     env_logger::Builder::new()
         .filter_level(match verbose {

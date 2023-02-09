@@ -1,22 +1,21 @@
+use clap::{ArgAction, Parser, Subcommand};
 use std::io;
 use std::net::{SocketAddr, ToSocketAddrs};
-use structopt::StructOpt;
 
-#[derive(StructOpt, Debug)]
-#[structopt(about)]
+#[derive(Parser, Debug)]
+#[clap(version, about)]
 pub struct Options {
     /// Logging verbosity (-v info, -vv debug, -vvv trace)
-    #[structopt(short = "v", long = "verbose", parse(from_occurrences), global = true)]
+    #[arg(short = 'v', long = "verbose", action = ArgAction::Count, global = true)]
     pub verbose: u8,
 
-    #[structopt(subcommand)]
+    #[command(subcommand)]
     pub mode: Mode,
 }
 
-#[derive(StructOpt, Debug)]
+#[derive(Subcommand, Debug)]
 pub enum Mode {
     /// Run the server half on a public machine
-    #[structopt(name = "server")]
     Server {
         /// Socket address to receive gateway connections from client
         gateway: SocketAddr,
@@ -25,19 +24,18 @@ pub enum Mode {
         public: SocketAddr,
     },
     /// Run the client half on a private machine
-    #[structopt(name = "client")]
     Client {
         /// Address of server's gateway
-        #[structopt(parse(try_from_str = socket_addrs))]
+        #[arg(value_parser = socket_addrs)]
         gateway: V<SocketAddr>,
 
         /// Address to relay public traffic to
-        #[structopt(parse(try_from_str = socket_addrs))]
+        #[arg(value_parser = socket_addrs)]
         private: V<SocketAddr>,
     },
 }
 
-/// Alias to avoid structopt special-casing `Vec`
+/// Alias to avoid clap special-casing `Vec`
 type V<T> = Vec<T>;
 
 fn socket_addrs(arg: &str) -> Result<Vec<SocketAddr>, io::Error> {
